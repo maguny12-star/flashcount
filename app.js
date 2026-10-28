@@ -98,6 +98,7 @@ function makeView(svgEl, el3d, wrap2d, plan) {
   try { if (window.THREE) v3 = new PlanView3D(el3d, plan); } catch (e) { console.warn("3D 사용 불가", e); }
   const hint = el3d.querySelector(".hint"); if (hint) el3d.appendChild(hint);
   const view = {
+    v3,
     mode: v3 ? "3d" : "2d",
     setMode(m) { view.mode = v3 && m === "3d" ? "3d" : "2d"; el3d.classList.toggle("hidden", view.mode !== "3d"); wrap2d.classList.toggle("hidden", view.mode === "3d"); if (v3 && view.mode === "3d") v3.resize(); },
     setFire(r, s) { v2.setFire(r, s); if (v3) v3.setFire(r, s); },

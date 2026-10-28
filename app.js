@@ -94,7 +94,7 @@ function makePlanView(svg, plan) {
 
 // 남은 시간 → [색, 글자, 심각도 0~1(연기 슬래브 두께용)]
 function statusOf(remaining, passedText = "피난 불가") {
-  if (remaining == null) return ["#2dd4bf", "안전", 0];
+  if (remaining == null) return ["#2dd4bf", "피난 가능", 0];
   if (remaining < 5) return ["#ff4d4f", passedText, 1];
   if (remaining <= 60) return ["#ff8a3d", `${Math.round(remaining)}초 남음`, 0.45 + 0.5 * (1 - remaining / 60)];
   if (remaining <= 180) return ["#ffd166", `${Math.round(remaining)}초 남음`, 0.12 + 0.33 * (1 - (remaining - 60) / 120)];
@@ -122,6 +122,35 @@ function makeView(svgEl, el3d, wrap2d, plan) {
   };
   view.setMode(view.mode);
   return view;
+}
+
+// ───────────────────────── 테마(밝게/어둡게)·전체화면·골든타임 ─────────────────────────
+const cssVar = (n, f) => (getComputedStyle(document.documentElement).getPropertyValue(n).trim() || f);
+function applyTheme(name) {
+  document.documentElement.dataset.theme = name;
+  try { localStorage.setItem("fc-theme", name); } catch (e) { /* 사생활 보호 모드 등 */ }
+  for (const v of [sc.view, lv.view]) if (v && v.v3) v.v3.applyTheme();
+  if (lv.c) lvChart(Math.floor(lv.t));
+  if (window.CUSTOM) CUSTOM.redraw();
+  themeSeg();
+}
+function themeSeg() { seg($("theme-seg"), [{ value: "light", label: "☀ 밝게" }, { value: "dark", label: "☾ 어둡게" }], document.documentElement.dataset.theme || "light", applyTheme); }
+function fullscreenBtn(btnId, cardId) {
+  $(btnId).onclick = () => { const el = $(cardId); if (document.fullscreenElement === el) document.exitFullscreen(); else if (el.requestFullscreen) el.requestFullscreen(); };
+}
+document.addEventListener("fullscreenchange", () => setTimeout(() => { if (sc.view) sc.view.resize(); if (lv.view) lv.view.resize(); if (lv.c) lvChart(Math.floor(lv.t)); }, 60));
+
+// 피난 골든타임 = 탈출 통로(현관·복도)가 막히기까지 남은 시간. remaining: {방: 초 | null(계산 시간 안에 안 막힘)}
+function goldenView(el, p, remaining, who) {
+  const route = Object.keys(p.rooms).filter(r => r === "corridor" || r === "entry");
+  const vals = route.map(r => remaining[r]).filter(v => v != null);
+  const g = vals.length ? Math.min(...vals) : null;
+  const cls = g == null ? "ok" : g < 5 ? "over" : g <= 60 ? "urgent" : g <= 180 ? "soon" : "ok";
+  const big = g == null ? "확보" : g < 5 ? "통로 피난 불가" : fmt(g);
+  const sub = g == null ? "계산 시간 안에 현관 쪽 통로가 막히지 않음" : g < 5 ? "통로로 못 나감 → 방 안 대피: 문 닫고 틈 막기, 창가에서 구조 요청" : "이 시간 안에 현관으로 나가야 함";
+  const chips = Object.keys(p.rooms).map(r => { const v = remaining[r]; const c = v == null ? "ok" : v < 5 ? "bad" : v <= 60 ? "soon" : "ok"; return `<span class="${c}">${p.room_ko[r]} ${v == null ? "가능" : v < 5 ? "불가" : Math.round(v) + "초"}</span>`; }).join("");
+  el.className = "golden " + cls;
+  el.innerHTML = `<div><div class="lab">피난 골든타임 · 현관·복도 통로 기준${who ? ` (${who})` : ""}</div><div class="big">${big}</div><div class="sub">${sub}</div></div><div class="rooms">${chips}</div>`;
 }
 
 // ───────────────────────── 공통: 클릭 상호작용 도우미 ─────────────────────────
@@ -257,7 +286,7 @@ function scRender() {
   const isDoor = p.door_rooms.includes(sc.room);
   const isCook = sc.room === p.cooktop[0] && sc.spot === p.cooktop[1];
   const has = patch => !!CASE_BY_ID[caseIdOf(sc.plan, sc.room, patch.spot ?? sc.spot, patch.door ?? sc.door, patch.win ?? sc.win, patch.growth ?? sc.growth, patch.q ?? sc.q)];
-  seg($("sc-plan"), Object.keys(PLANS).map(k => ({ value: k, label: PLANS[k].label || planShort(k) })), sc.plan, v => { sc.plan = v; sc.t = 0; scRender(); });
+  seg($("sc-plan"), Object.keys(PLANS).map(k => { const has = CASES.some(c => c.plan === k); return { value: k, label: (PLANS[k].label || planShort(k)) + (has ? "" : " · 계산 중"), disabled: !has }; }), sc.plan, v => { sc.plan = v; sc.t = 0; scRender(); });
   seg($("sc-room"), roomsWithCases(sc.plan).map(r => ({ value: r, label: p.room_ko[r] })), sc.room, v => { sc.room = v; sc.spot = 0; sc.t = 0; scRender(); });
   const spots = p.fire[sc.room];
   seg($("sc-spot"), spots.map((_, i) => ({ value: i, label: spots.length > 1 ? `화원 ${i + 1}` : "1곳", disabled: !has({ spot: i }) })), sc.spot, v => { sc.spot = +v; sc.t = 0; scRender(); });
@@ -317,6 +346,8 @@ function scTick() {
     sc.view.setRoom(r, color, text, smokeLevel(c, r, t));
   }
   $("sc-tlabel").textContent = fmt(t);
+  const remaining = {}; for (const r in p.rooms) { const tu = c.rooms[r].t_untenable; remaining[r] = tu == null ? null : tu - t; }
+  goldenView($("sc-golden"), p, remaining, "FDS 결과");
   const others = Object.keys(p.rooms).filter(r => r !== sc.room).map(r => c.rooms[r].t_untenable).filter(v => v != null);
   const firstOther = others.length ? Math.min(...others) : null;
   const stat = (k, v, cls = "") => `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
@@ -386,6 +417,24 @@ function lvEnsurePreds(upto) {
   const tc = lvTcBySlot();
   for (let k = lv.preds.length; k <= upto; k++) lv.preds[k] = k < 10 ? null : model.predictAt(tc, k);
 }
+function setLoading(on, text) { $("lv-loading").classList.toggle("hidden", !on); if (text) $("lv-loading-text").textContent = text; }
+// 전체 구간(최대 900초 × GRU 60스텝)을 한 번에 돌리면 1~2초 멈추므로 40초씩 끊어 계산하고 그동안 '계산 중'을 보여 준다
+function lvEnsurePredsAsync(upto, done) {
+  if (lv.preds.length > upto) { done(); return; }
+  if (lv.job) { lv.job.done = done; return; }
+  const job = lv.job = { c: lv.c, done };
+  setLoading(true, "AI 전체 구간 계산 중…");
+  const tc = lvTcBySlot();
+  const step = () => {
+    if (lv.job !== job || lv.c !== job.c) return;
+    const end = Math.min(upto, lv.preds.length + 40);
+    for (let k = lv.preds.length; k <= end; k++) lv.preds[k] = k < 10 ? null : model.predictAt(tc, k);
+    $("lv-loading-text").textContent = `AI 전체 구간 계산 중… ${Math.round(lv.preds.length / (upto + 1) * 100)}%`;
+    if (lv.preds.length > upto) { lv.job = null; setLoading(false); job.done(); }
+    else setTimeout(step, 0);
+  };
+  setTimeout(step, 0);
+}
 // 경고 기록은 '지금까지 재생한 시각'까지만 (비교표를 위해 끝까지 미리 계산해도 미래 경고가 새지 않게)
 function lvLogUpTo(t) {
   for (let k = (lv.logT ?? -1) + 1; k <= t; k++) { lvThinkStep(k); lvLogEvents(k); }
@@ -421,7 +470,11 @@ function lvThinkStep(k) {
       const trend = urg.prevTen == null ? "" : urg.ten < urg.prevTen - 5 ? " · 줄어드는 중" : urg.ten > urg.prevTen + 5 ? " · 늘어남(온도 상승 둔화)" : " · 비슷";
       say(urg.ten < 5 ? `${p.room_ko[urg.r]}: 피난 불가로 판단 유지` : `${p.room_ko[urg.r]} 피난 불가까지 ${Math.round(urg.ten)}초${trend}` + (urg.ten > 60 && urg.ten <= 150 ? ` → 60초 경고까지 약 ${Math.round(urg.ten - 60)}초` : ""), "inf");
     } else say("모든 방 피난 가능 시간 5분 이상 — 당장 위험한 방 없음", "inf");
-    if (pr.fo < 300) say(`플래시오버 ${pr.fo < 5 ? "임박" : `약 ${Math.round(pr.fo)}초 후`} 예상 (화원 방 상층 600°C)`, pr.fo < 60 ? "warn" : "inf");
+    const fo = foStatus(k, pr);
+    if (fo.kind === "soon") say(`플래시오버 약 ${Math.round(fo.sec)}초 후 예상 (화원 방 상층 600°C)`, fo.sec < 60 ? "warn" : "inf");
+    else if (fo.kind === "imminent") say("플래시오버 임박 — AI 남은 시간 5초 미만", "warn");
+    else if (fo.kind === "guard") say(`천장 ${Math.round(lvHotT(k))}°C — 플래시오버 임박 판정 (온도 기준 보조)`, "warn");
+    else if (fo.kind === "after" && !lv.flags.saidAfter) { lv.flags.saidAfter = k; say("플래시오버 발생 추정 — 경고 뒤 60초 경과. 이후 AI 출력은 학습 범위 밖이라 참고만", "sys"); }
   }
   if (k % 20 === 0 && !quiet) {
     const d = hiddenDelta(pr.h, lv.preds[k - 1] && lv.preds[k - 1].h);
@@ -447,10 +500,25 @@ function lvThinkRender() {
   body.scrollTop = 1e6;
 }
 
+// 화원 방(가장 뜨거운 방) 천장 온도 — 플래시오버 보조 판정용
+function lvHotT(k) { const c = lv.c, p = PLANS[c.plan]; return Math.max(...p.slots.filter(Boolean).map(r => c.tc[r][Math.min(k, c.tc[r].length - 1)] / 10)); }
+// 플래시오버 표시 한 곳에서 계산 (수치·생각 패널·경고 기록이 같은 말을 하도록)
+//   AI 출력 + 보조 판정: 천장 500°C↑ = 임박(온도 기준), 경고 뒤 60초 = 발생 추정(그 뒤 출력은 학습 범위 밖)
+function foStatus(k, pr) {
+  if (!pr) return { text: "—", cls: "", kind: "none" };
+  const warnAt = Math.min(lv.flags.fo60 ?? Infinity, lv.flags.foT ?? Infinity);
+  if (k > warnAt + 60) return { text: "발생 추정", cls: "red", kind: "after" };
+  if (lvHotT(k) >= 500) return { text: "임박 (천장 500°C↑)", cls: "red", kind: "guard" };
+  if (pr.fo >= 300) return { text: "징후 없음", cls: "", kind: "none" };
+  if (pr.fo < 5) return { text: "임박", cls: "red", kind: "imminent" };
+  return { text: `약 ${Math.round(pr.fo)}초 후`, cls: pr.fo < 60 ? "red" : "", kind: "soon", sec: pr.fo };
+}
+
 function lvLogEvents(k) {
   const pr = lv.preds[k]; if (!pr) return;
   const p = PLANS[lv.c.plan];
   const add = (key, text, warn) => { if (lv.flags[key]) return; lv.flags[key] = k; lv.log.push({ t: k, text, warn }); if (warn) lv.thoughts.push({ t: k, text: `⚠ 경고 발령 — ${text}`, kind: "warn" }); };
+  if (lvHotT(k) >= 500) add("foT", "화원 방 천장 500°C 초과 — 플래시오버 임박 (온도 기준 보조 판정)", true);
   const top = pr.room.indexOf(Math.max(...pr.room));
   if (pr.room[top] >= 0.9 && p.slots[top]) add("room", `화원 방 추정: ${p.room_ko[p.slots[top]]} (확률 ${Math.round(pr.room[top] * 100)}%)`, false);
   p.slots.forEach((r, j) => {
@@ -484,8 +552,10 @@ function lvRender() {
     if (!pr) { v.setRoom(r, "#c9ced6", "센서 수집 중", smokeLevel(c, r, t)); return; }
     const rem = pr.ten[j] >= 300 ? null : pr.ten[j];
     const [color, text] = statusOf(rem, "피난 불가 (AI)");
-    v.setRoom(r, color, pr.ten[j] >= 300 ? "안전 (AI)" : text, smokeLevel(c, r, t));
+    v.setRoom(r, color, pr.ten[j] >= 300 ? "피난 가능 (AI)" : text, smokeLevel(c, r, t));
   });
+  const remaining = {}; p.slots.forEach((r, j) => { if (r) remaining[r] = !pr ? null : pr.ten[j] >= 300 ? null : pr.ten[j]; });
+  goldenView($("lv-golden"), p, remaining, pr ? "AI 예측" : "센서 수집 중");
   const topJ = pr ? pr.room.indexOf(Math.max(...pr.room)) : -1;
   v.setAIMarker(pr && pr.room[topJ] > 0.5 && p.slots[topJ] ? p.slots[topJ] : null);
   $("lv-tlabel").textContent = fmt(t);
@@ -498,11 +568,10 @@ function lvRender() {
 
   // KPI
   const stat = (k, v, cls = "") => `<div class="stat"><div class="k">${k}</div><div class="v ${cls}">${v}</div></div>`;
-  // 플래시오버 뒤 구간은 학습 목표에서 뺐으므로(발생 30초 뒤부터) 경고 후 60초가 지나면 '발생 추정'으로 고정
-  const foTxt = !pr ? "—" : (lv.flags.fo60 != null && t > lv.flags.fo60 + 60) ? "발생 추정" : pr.fo >= 300 ? "징후 없음" : pr.fo < 5 ? "임박" : `약 ${Math.round(pr.fo)}초 후`;
+  const fo = foStatus(t, pr);
   const topRoom = rooms[0];
   let html = stat("경과 시간", fmt(t)) +
-    stat("AI: 플래시오버까지", foTxt, pr && pr.fo < 60 ? "red" : "") +
+    stat("AI: 플래시오버까지", fo.text, fo.cls) +
     stat("AI: 화원 방", pr ? `${p.room_ko[topRoom.r]} ${(topRoom.pct * 100).toFixed(0)}%` : "—");
   if (lv.reveal) html += stat("정답: 화원 방", `${p.room_ko[c.fire_room]}`, "ok") + stat("정답: 플래시오버", c.t_flashover == null ? "안 일어남" : fmt(c.t_flashover), "ok");
   $("lv-kpi").innerHTML = html;
@@ -516,8 +585,11 @@ function lvRender() {
   if (lv.reveal || lv.t >= c.t_end) lvResult(); else $("lv-result").innerHTML = `<div class="note">재생이 끝나거나 '정답 표시'를 켜면 비교표가 나옵니다.</div>`;
 }
 
-const ROOM_COLORS = ["#ff6a3d", "#6fb7ff", "#2dd4bf", "#c084fc", "#ffb020", "#9aa3b2", "#f3f1ec"];
+const ROOM_COLORS_DARK = ["#ff6a3d", "#6fb7ff", "#2dd4bf", "#c084fc", "#ffb020", "#9aa3b2", "#f3f1ec"];
+const ROOM_COLORS_LIGHT = ["#e8552a", "#2b6fd6", "#0f9f8c", "#8e44ad", "#c77d00", "#5b6474", "#1b1f27"];
+const roomColors = () => (document.documentElement.dataset.theme === "dark" ? ROOM_COLORS_DARK : ROOM_COLORS_LIGHT);
 function lvChart(t) {
+  const ROOM_COLORS = roomColors();
   const cv = $("lv-chart"), p = PLANS[lv.c.plan];
   const dpr = window.devicePixelRatio || 1;
   const w = cv.clientWidth, h = cv.clientHeight;
@@ -530,7 +602,7 @@ function lvChart(t) {
   p.slots.forEach(r => { if (r) for (let k = 0; k <= t && k < lv.c.tc[r].length; k++) ymax = Math.max(ymax, lv.c.tc[r][k] / 10); });
   ymax = Math.ceil(ymax / 100) * 100;
   const X = x => L + (x / tmax) * (w - L - R), Y = y => T + (1 - (y - 0) / ymax) * (h - T - B);
-  g.strokeStyle = "#2a3140"; g.fillStyle = "#9aa3b2"; g.font = "11px Pretendard, Malgun Gothic"; g.textAlign = "right";
+  g.strokeStyle = cssVar("--line", "#2a3140"); g.fillStyle = cssVar("--muted", "#9aa3b2"); g.font = "11px Pretendard, Malgun Gothic"; g.textAlign = "right";
   for (let y = 0; y <= ymax; y += ymax / 4) { g.beginPath(); g.moveTo(L, Y(y)); g.lineTo(w - R, Y(y)); g.stroke(); g.fillText(y + "°", L - 4, Y(y) + 4); }
   g.textAlign = "center";
   for (let x = 0; x <= tmax; x += 60) { g.fillText(fmt(x), X(x), h - 6); }
@@ -543,15 +615,20 @@ function lvChart(t) {
   });
   // 범례
   g.textAlign = "left"; let lx = L + 6;
-  p.slots.forEach((r, j) => { if (!r) return; g.fillStyle = ROOM_COLORS[j]; g.fillRect(lx, T + 2, 10, 10); g.fillStyle = "#eceae4"; g.fillText(p.room_ko[r], lx + 13, T + 11); lx += 13 + g.measureText(p.room_ko[r]).width + 10; });
+  p.slots.forEach((r, j) => { if (!r) return; g.fillStyle = ROOM_COLORS[j]; g.fillRect(lx, T + 2, 10, 10); g.fillStyle = cssVar("--ink", "#eceae4"); g.fillText(p.room_ko[r], lx + 13, T + 11); lx += 13 + g.measureText(p.room_ko[r]).width + 10; });
   // 현재 시각 선
-  g.strokeStyle = "#ff6a3d"; g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(X(t), T); g.lineTo(X(t), h - B); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = cssVar("--ember", "#ff6a3d"); g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(X(t), T); g.lineTo(X(t), h - B); g.stroke(); g.setLineDash([]);
 }
 
 function lvResult() {
   const c = lv.c, p = PLANS[c.plan];
-  lvEnsurePreds(Math.floor(c.t_end));
-  const firstT = (cond) => { for (let k = 10; k < lv.preds.length; k++) if (lv.preds[k] && cond(lv.preds[k])) return k; return null; };
+  const tEnd = Math.floor(c.t_end);
+  if (lv.preds.length <= tEnd) {   // 끝까지 계산이 안 돼 있으면 뒤에서 나눠 계산하고 끝나면 다시 그림
+    $("lv-result").innerHTML = `<div class="note">AI 전체 구간 계산 중…</div>`;
+    lvEnsurePredsAsync(tEnd, () => { if (lv.c === c && (lv.reveal || lv.t >= c.t_end)) lvResult(); });
+    return;
+  }
+  const firstT = (cond) => { for (let k = 10; k < lv.preds.length; k++) if (lv.preds[k] && cond(lv.preds[k], k)) return k; return null; };
   const rows = p.slots.map((r, j) => {
     if (!r) return "";
     const actual = c.rooms[r].t_untenable;
@@ -564,19 +641,29 @@ function lvResult() {
   }).join("");
   const at30 = lv.preds[30] || lv.preds[lv.preds.length - 1];
   const topIdx = at30 ? at30.room.indexOf(Math.max(...at30.room)) : -1;
-  const foW = firstT(pr => pr.fo < 60);
+  const foW = firstT((pr, k) => pr.fo < 60 || lvHotT(k) >= 500);   // AI 경고 또는 온도 기준 보조 판정
   $("lv-result").innerHTML = `<table><tr><th>방</th><th class="num">AI "60초 안" 경고</th><th class="num">AI "피난 불가"</th><th class="num">FDS 실제 피난 불가</th><th>판정</th></tr>${rows}</table>
     <table style="margin-top:10px"><tr><th></th><th>AI</th><th>FDS 정답</th></tr>
     <tr><td>화원 방 (화재 30초 시점)</td><td>${topIdx >= 0 && p.slots[topIdx] ? p.room_ko[p.slots[topIdx]] + ` (${Math.round(at30.room[topIdx] * 100)}%)` : "—"}</td><td>${p.room_ko[c.fire_room]} ${topIdx >= 0 && p.slots[topIdx] === c.fire_room ? "✓" : "✗"}</td></tr>
-    <tr><td>플래시오버 "60초 안" 경고</td><td>${foW == null ? "경고 없음" : fmt(foW)}</td><td>${c.t_flashover == null ? "안 일어남" + (foW == null ? " ✓" : " (헛경고)") : fmt(c.t_flashover) + (foW == null ? " (놓침)" : ` (경고 ${Math.round(c.t_flashover - foW)}초 전)`)}</td></tr></table>`;
+    <tr><td>플래시오버 "60초 안" 경고 (AI + 천장 500°C 보조)</td><td>${foW == null ? "경고 없음" : fmt(foW)}</td><td>${c.t_flashover == null ? "안 일어남" + (foW == null ? " ✓" : " (헛경고)") : fmt(c.t_flashover) + (foW == null ? " (놓침)" : ` (경고 ${Math.round(c.t_flashover - foW)}초 전)`)}</td></tr></table>`;
 }
 
 function lvLoad(id) {
-  lv.c = CASE_BY_ID[id]; lv.t = 0; lv.preds = []; lv.log = []; lv.flags = {}; lv.logT = -1; lv.thoughts = []; lv.playing = false;
-  $("lv-play").textContent = "▶ 재생";
+  lv.c = CASE_BY_ID[id]; lv.t = 0; lv.preds = []; lv.log = []; lv.flags = {}; lv.logT = -1; lv.thoughts = []; lv.playing = false; lv.job = null;
+  setLoading(false);
+  lvSetPlayLabel();
   if (lv.refreshReveal) lv.refreshReveal();   // 목록 글자·'표시' 버튼을 현재 상태에 맞춤 (목록에 없는 사례면 '직접 고른 조건' 항목 추가)
   $("lv-case").value = id;
+  lvPlanTabs();
   lvRender();
+}
+
+function lvSetPlayLabel() { $("lv-play").textContent = lv.playing ? "⏸ 멈춤" : "▶ 재생"; $("lv-play2").textContent = lv.playing ? "⏸" : "▶"; }
+function lvTogglePlay() {
+  if (lv.playing) { lv.playing = false; lvSetPlayLabel(); lvThinkRender(); return; }
+  if (lv.t >= lv.c.t_end) { lv.t = 0; lv.log = []; lv.flags = {}; lv.preds = []; lv.logT = -1; lv.thoughts = []; lv.job = null; setLoading(false); }
+  lv.playing = true; lv.last = performance.now(); lvSetPlayLabel();
+  lv.raf = requestAnimationFrame(lvLoop);
 }
 
 function lvLoop(ts) {
@@ -584,8 +671,28 @@ function lvLoop(ts) {
   const dt = (ts - lv.last) / 1000; lv.last = ts;
   lv.t = Math.min(lv.t + dt * lv.speed, lv.c.t_end);
   lvRender();
-  if (lv.t >= lv.c.t_end) { lv.playing = false; $("lv-play").textContent = "▶ 재생"; lvThinkRender(); return; }
+  if (lv.t >= lv.c.t_end) { lv.playing = false; lvSetPlayLabel(); lvThinkRender(); return; }
   lv.raf = requestAnimationFrame(lvLoop);
+}
+
+// 보기 창 위의 평면 탭: 유형 A / B / C(계산 전엔 비활성) / 사용자 지정(이론값)
+function lvPlanTabs() {
+  const items = Object.keys(PLANS).map(k => { const has = CASES.some(c => c.plan === k && (c.split === "test" || c.split === "new")); return { value: k, label: planShort(k) + (has ? "" : " · 계산 중"), disabled: !has }; });
+  items.push({ value: "custom", label: "사용자 지정 (이론값)" });
+  seg($("lv-plantabs"), items, lv.custom ? "custom" : lv.c.plan, v => {
+    closePop();
+    if (v === "custom") {
+      if (lv.playing) lvTogglePlay();
+      lv.custom = true; $("lv-live-area").classList.add("hidden"); $("lv-custom").classList.remove("hidden");
+      CUSTOM.show($("lv-custom")); lvPlanTabs(); return;
+    }
+    lv.custom = false; $("lv-live-area").classList.remove("hidden"); $("lv-custom").classList.add("hidden");
+    if (lv.c.plan !== v) {
+      const first = CASES.filter(c => c.plan === v && (c.split === "test" || c.split === "new")).sort((a, b) => a.id.localeCompare(b.id))[0];
+      lv.reveal = false; lvLoad(first.id);
+    } else lvPlanTabs();
+    if (lv.view) { lv.view.resize(); lvChart(Math.floor(lv.t)); }
+  });
 }
 
 function lvSetup() {
@@ -607,12 +714,9 @@ function lvSetup() {
   const revealRefresh = () => { seg($("lv-reveal"), [{ value: 0, label: "가림" }, { value: 1, label: "표시" }], lv.reveal ? 1 : 0, v => { lv.reveal = !!+v; revealRefresh(); lvRender(); }); fillCases(); };
   lv.refreshReveal = revealRefresh;
   revealRefresh();
-  $("lv-play").onclick = () => {
-    if (lv.playing) { lv.playing = false; $("lv-play").textContent = "▶ 재생"; lvThinkRender(); return; }
-    if (lv.t >= lv.c.t_end) { lv.t = 0; lv.log = []; lv.flags = {}; lv.preds = []; lv.logT = -1; lv.thoughts = []; }
-    lv.playing = true; lv.last = performance.now(); $("lv-play").textContent = "⏸ 멈춤";
-    lv.raf = requestAnimationFrame(lvLoop);
-  };
+  $("lv-play").onclick = lvTogglePlay;
+  $("lv-play2").onclick = lvTogglePlay;
+  fullscreenBtn("lv-full", "lv-card");
   $("lv-reset").onclick = () => lvLoad(sel.value);
   $("lv-random").onclick = () => {   // 평가용(학습 제외) 사례 중 무작위, 조건은 가린 채
     const pool = tests.filter(c => !lv.c || c.id !== lv.c.id);
@@ -632,11 +736,14 @@ async function init() {
   document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
     document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
     document.querySelectorAll("section.tab").forEach(s => s.classList.toggle("on", s.id === `tab-${b.dataset.tab}`));
-    if (b.dataset.tab === "live" && lv.c) { lvChart(Math.floor(lv.t)); lv.view.resize(); }
+    if (b.dataset.tab === "live" && lv.c) { lvChart(Math.floor(lv.t)); lv.view.resize(); if (lv.custom) CUSTOM.redraw(); }
     if (b.dataset.tab === "scenario" && sc.view) sc.view.resize();
   });
+  themeSeg();
   scSetup();
+  fullscreenBtn("sc-full", "sc-card");
   lvSetup();
+  window.PLANS = PLANS; window.model = model;   // custom.js(사용자 지정 이론값)에서 씀
   window.FC = { PLANS, CASES, model, sc, lv };   // 콘솔 점검용
 }
 init().catch(e => { document.body.insertAdjacentHTML("afterbegin", `<div class="banner red">데이터를 불러오지 못했습니다: ${e.message}. 이 페이지는 웹 서버(또는 GitHub Pages)에서 열어야 합니다.</div>`); console.error(e); });

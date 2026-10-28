@@ -5,13 +5,15 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FlashCount — 아파트 화재 골든타임 예측 AI</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
-<link rel="stylesheet" href="style.css?v=20261028c">
+<link rel="stylesheet" href="style.css?v=20261028d">
+<script>try { document.documentElement.dataset.theme = localStorage.getItem("fc-theme") || "light"; } catch (e) { document.documentElement.dataset.theme = "light"; }</script>
 </head>
 <body>
 <header>
   <div class="top">
     <h1>FlashCount <small>플래시카운트</small></h1>
     <div class="sub">아파트 화재 골든타임 예측 AI — 방마다 달린 천장 온도 센서만 보고, 방별 피난 가능 시간·플래시오버·화원 위치를 실시간으로 예측합니다.</div>
+    <div class="seg" id="theme-seg" style="margin-left:auto"></div>
   </div>
 </header>
 <nav><div class="tabs">
@@ -43,12 +45,15 @@
       </div>
     </div>
     <div>
-      <div class="card">
-        <div class="viewtoggle"><h2 id="sc-title" style="margin:0">평면</h2><div class="seg" id="sc-viewmode"></div></div>
-        <div class="view3d" id="sc-3d"><div class="hint">드래그: 회전 · 휠: 확대 · 클릭: 방 = 불난 방 바꾸기, 문·창 = 열림/닫힘, 화원 = 속도·크기 설정</div></div>
-        <div class="plan-wrap hidden" id="sc-2d"><svg id="sc-svg"></svg></div>
+      <div class="card viewcard" id="sc-card">
+        <div class="viewtoggle"><h2 id="sc-title" style="margin:0">평면</h2><div class="tools"><div class="seg" id="sc-viewmode"></div><button class="iconbtn" id="sc-full" title="전체화면 (Esc로 나가기)">⛶</button></div></div>
+        <div class="viewwrap">
+          <div class="view3d" id="sc-3d"><div class="hint">드래그: 회전 · 휠: 확대 · 클릭: 방 = 불난 방 바꾸기, 문·창 = 열림/닫힘, 화원 = 속도·크기 설정</div></div>
+          <div class="plan-wrap hidden" id="sc-2d"><svg id="sc-svg"></svg></div>
+        </div>
+        <div class="golden" id="sc-golden"></div>
         <div class="legend">
-          <span style="--c:#2dd4bf">안전 (계산 시간 안에 피난 불가 안 옴)</span>
+          <span style="--c:#2dd4bf">피난 가능 (계산 시간 안에 피난 불가 안 옴)</span>
           <span style="--c:#ffd166">피난 불가까지 3분 이내</span>
           <span style="--c:#ff8a3d">1분 이내</span>
           <span style="--c:#ff4d4f">피난 불가 (1.8 m 높이에서 온도 60°C↑ · 가시거리 5 m↓ · CO 1,400 ppm↑ · O₂ 15%↓ 중 하나)</span>
@@ -97,24 +102,27 @@
       </div>
     </div>
     <div>
-      <div class="card">
-        <div class="viewtoggle"><h2 id="lv-title" style="margin:0">평면 — AI가 본 방별 남은 시간</h2><div class="seg" id="lv-viewmode"></div></div>
-        <div class="live-main">
-          <div>
-            <div class="view3d" id="lv-3d"><div class="hint">드래그: 회전 · 휠: 확대 · 클릭: 방·문·창으로 조건 바꾸기 · 주황 고리 = AI가 추정한 화원 방</div></div>
-            <div class="plan-wrap hidden" id="lv-2d"><svg id="lv-svg"></svg></div>
-          </div>
-          <div class="think" id="lv-think">
-            <div class="think-h"><span class="dot" id="lv-think-dot"></span><span>AI가 지금 하는 일</span><span class="think-state" id="lv-think-state">대기</span></div>
-            <div class="think-body" id="lv-think-body"></div>
-          </div>
+      <div class="seg plantabs" id="lv-plantabs"></div>
+      <div id="lv-live-area">
+      <div class="card viewcard" id="lv-card">
+        <div class="viewtoggle"><h2 id="lv-title" style="margin:0">평면 — AI가 본 방별 남은 시간</h2><div class="tools"><div class="seg" id="lv-viewmode"></div><button class="iconbtn" id="lv-full" title="전체화면 (Esc로 나가기)">⛶</button></div></div>
+        <div class="viewwrap">
+          <div class="view3d" id="lv-3d"><div class="hint">드래그: 회전 · 휠: 확대 · 클릭: 방·문·창으로 조건 바꾸기 · 주황 고리 = AI가 추정한 화원 방</div></div>
+          <div class="plan-wrap hidden" id="lv-2d"><svg id="lv-svg"></svg></div>
+          <div class="loading hidden" id="lv-loading"><span class="spin"></span><span id="lv-loading-text">AI 계산 중…</span></div>
         </div>
         <div class="timebar">
+          <button class="btn small" id="lv-play2" title="재생/멈춤">▶</button>
           <div class="t" style="min-width:auto">경과</div>
           <input type="range" id="lv-time" min="0" max="600" value="0" step="1">
           <div class="t" id="lv-tlabel">0:00</div>
         </div>
+        <div class="golden" id="lv-golden"></div>
         <div class="kpi" id="lv-kpi"></div>
+        <div class="think" id="lv-think">
+          <div class="think-h"><span class="dot" id="lv-think-dot"></span><span>AI가 지금 하는 일</span><span class="think-state" id="lv-think-state">대기</span></div>
+          <div class="think-body" id="lv-think-body"></div>
+        </div>
       </div>
       <div class="card">
         <h2>센서 입력: 방별 천장 온도 (°C)</h2>
@@ -124,6 +132,8 @@
         <h2>AI 예측 vs FDS 정답</h2>
         <div id="lv-result"><div class="note">재생이 끝나거나 '정답 표시'를 켜면 비교표가 나옵니다.</div></div>
       </div>
+      </div>
+      <div id="lv-custom" class="hidden"></div>
     </div>
   </div>
 </section>
@@ -146,7 +156,10 @@
           <li><b>자체 데이터셋 생성</b>: 한국 아파트 평면 2개(유형 A: 2020년대 4베이 발코니 확장형 LH트릴로채 111A-1 / 유형 B: 1990년대 계단실형 발코니 비확장 일산 백송마을5단지)를 FDS 6.11로 모델링. 불난 방 5곳 × 화원 위치 × 문 열림/닫힘 × 창 열림/닫힘 × 성장 속도 3 × 최대 크기 2 → <b>228건</b>, 계산 약 27시간.</li>
           <li><b>정답 만들기</b>: 방마다 1.8 m 높이의 온도·가시거리·CO·O₂로 피난 불가 시각, 화원 방 상층 600°C로 플래시오버 시각.</li>
           <li><b>AI 학습</b>: 입력은 방별 천장 온도 최근 60초뿐. GRU(은닉 64, 2층, 파라미터 39,951개)가 ① 방별 피난 불가까지 남은 초 ② 플래시오버까지 남은 초 ③ 화원 방 확률을 동시에 출력. 학습 예시 20,903개, 조기 종료 72에포크.</li>
-          <li><b>평가는 케이스 단위로 분리</b>(같은 화재의 앞뒤가 학습·평가에 섞이지 않게): A 처음 보는 조건, B 처음 보는 방, C 처음 보는 평면(유형 A로 학습 → 유형 B 평가).</li>
+          <li><b>평가는 케이스 단위로 분리</b>(같은 화재의 앞뒤가 학습·평가에 섞이지 않게): A 처음 보는 조건, B 처음 보는 방, C 처음 보는 평면(유형 A로 학습 → 유형 B 평가). 유형 C(타워형)는 학습·검증에 전혀 쓰지 않은 평면 단위 평가용.</li>
+          <li><b>플래시오버 표시</b>: AI가 잘 맞히는 구간은 직전 1분이라, 화면에는 AI 출력에 <b>화원 방 천장 500°C 보조 판정</b>을 더해 '임박'을 표시하고, 경고 뒤 60초가 지나면 '발생 추정'으로 고정합니다(그 뒤 구간은 학습 범위 밖).</li>
+          <li><b>피난 골든타임</b> = 탈출 통로(현관·복도)가 막히기까지 남은 시간. 시나리오 탭은 FDS 결과, 실시간 탭은 AI 예측으로 계산.</li>
+          <li><b>사용자 지정(이론값)</b>: 방 크기·개구부·화재 조건을 넣으면 FDS 정답 대신 SFPE 상관식(Thomas 플래시오버, MQH 상층 온도, Heskestad 플룸)으로 보수적 이론값을 계산하고, 그 온도를 AI에 넣었을 때의 반응을 참고로 보여 줍니다.</li>
         </ol>
       </div>
       <div class="card">
@@ -198,8 +211,9 @@
 <footer>2026 AI 라이프 솔루션 챌린지 출품작 · 강준혁 (충북대학교 안전공학과) · FDS 6.11.1 · PyTorch GRU · 이 페이지의 AI 계산은 모두 브라우저 안에서 실행됩니다.</footer>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="gru.js?v=20261028c"></script>
-<script src="view3d.js?v=20261028c"></script>
-<script src="app.js?v=20261028c"></script>
+<script src="gru.js?v=20261028d"></script>
+<script src="view3d.js?v=20261028d"></script>
+<script src="custom.js?v=20261028d"></script>
+<script src="app.js?v=20261028d"></script>
 </body>
 </html>

@@ -145,7 +145,7 @@ class PlanView3D {
     const span = Math.max(this.maxx - this.minx, this.maxy - this.miny);
 
     const scene = this.scene = new THREE.Scene();
-    scene.background = new THREE.Color(0x0e1117);
+    scene.background = new THREE.Color(PlanView3D.themeColor("--scene-bg", "#1f2635"));
     const cam = this.camera = new THREE.PerspectiveCamera(40, 16 / 10, 0.1, 200);
     cam.position.set(span * 0.12, span * 0.8, span * 0.9);
     const renderer = this.renderer = new THREE.WebGLRenderer({ antialias: true });
@@ -185,7 +185,9 @@ class PlanView3D {
     this.clock = new THREE.Clock();
     this.running = true;
     this.resize();
-    window.addEventListener("resize", () => this.resize());
+    this._onResize = () => this.resize();
+    window.addEventListener("resize", this._onResize);
+    document.addEventListener("fullscreenchange", this._onResize);
     const loop = () => { if (!this.running) return; requestAnimationFrame(loop); this.tick(); };
     loop();
   }
@@ -207,7 +209,7 @@ class PlanView3D {
     const matGlassOpen = new THREE.MeshStandardMaterial({ color: 0xbfe3ff, transparent: true, opacity: 0.15, roughness: 0.1 });
     const matDoor = new THREE.MeshStandardMaterial({ color: 0x9a6a3a, roughness: 0.7 });
     // 바닥 + 바깥 땅
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: 0x151922, roughness: 1 }));
+    const ground = this.ground = new THREE.Mesh(new THREE.PlaneGeometry(80, 80), new THREE.MeshStandardMaterial({ color: PlanView3D.themeColor("--scene-ground", "#28303f"), roughness: 1 }));
     ground.rotation.x = -Math.PI / 2; ground.position.y = -0.02; ground.receiveShadow = true; scene.add(ground);
     for (const m of p.meshes) this.box(m[0], m[1], m[2], m[3], -0.06, 0, matFloor, false);
     // 바깥벽
@@ -239,7 +241,7 @@ class PlanView3D {
       g.add(panel);
       g.position.set(this.X(alongX ? x1 : (x1 + x2) / 2), 0, this.Z(alongX ? (y1 + y2) / 2 : y2));
       scene.add(g);
-      this.doors[r] = { g, openAngle: alongX ? -1.3 : 1.3 };
+      this.doors[r] = { g, openAngle: alongX ? -1.3 : 1.3, target: 0 };
     }
     // 창: 유리판
     for (const r in p.windows) {
@@ -311,7 +313,16 @@ class PlanView3D {
     const [fx, fy] = this.plan.fire[room][spot];
     this.fire.position.set(this.X(fx + 0.3), 0, this.Z(fy + 0.3)); this.fire.visible = true;
   }
-  setDoor(room, open) { const d = this.doors[room]; if (d) d.g.rotation.y = open ? d.openAngle : 0; }
+  setDoor(room, open) { const d = this.doors[room]; if (d) d.target = open ? d.openAngle : 0; }   // 실제 회전은 tick()에서 부드럽게
+  static themeColor(varName, fallback) {
+    const v = getComputedStyle(document.documentElement).getPropertyValue(varName).trim();
+    return v || fallback;
+  }
+  // 밝은/어두운 테마 전환 시 배경·바닥 색만 바꿈
+  applyTheme() {
+    this.scene.background.set(PlanView3D.themeColor("--scene-bg", "#1f2635"));
+    this.ground.material.color.set(PlanView3D.themeColor("--scene-ground", "#28303f"));
+  }
   setWindow(room, open) { const w = this.wins[room]; if (w) w.material = w.userData.mats[open ? 1 : 0]; }
   setAIMarker(room) {
     if (!room) { this.aiRing.visible = false; return; }
@@ -357,7 +368,9 @@ class PlanView3D {
     });
   }
   resize() {
-    const w = this.container.clientWidth || 800, h = Math.round(w * 10 / 16);
+    const fs = document.fullscreenElement && document.fullscreenElement.contains(this.container);
+    const w = this.container.clientWidth || 800;
+    const h = fs ? Math.max(200, this.container.clientHeight) : Math.round(w * 10 / 16);   // 전체화면이면 주어진 높이를 꽉 채움
     this.renderer.setSize(w, h, false);
     this.renderer.domElement.style.width = "100%"; this.renderer.domElement.style.height = h + "px";
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
@@ -383,9 +396,10 @@ class PlanView3D {
       }
     }
     for (const r in this.rooms) for (const m of this.rooms[r].layers) if (m.visible) { const tex = m.material.map; tex.offset.x += m.userData.drift[0] * dt; tex.offset.y += m.userData.drift[1] * dt; }
+    for (const r in this.doors) { const d = this.doors[r]; const cur = d.g.rotation.y; if (Math.abs(d.target - cur) > 1e-3) d.g.rotation.y = cur + (d.target - cur) * Math.min(1, dt * 7); }   // 문 여닫는 동작
     if (this.aiRing.visible) { const s = 1 + 0.12 * Math.sin(t * 4); this.aiRing.scale.set(s, s, 1); }
     this.controls.update();
     this.renderer.render(this.scene, this.camera);
   }
-  dispose() { this.running = false; this.renderer.dispose(); }
+  dispose() { this.running = false; this.renderer.dispose(); window.removeEventListener("resize", this._onResize); document.removeEventListener("fullscreenchange", this._onResize); }
 }

@@ -7,7 +7,7 @@ let PLANS, CASES, MODEL, model;
 const CASE_BY_ID = {};
 const $ = id => document.getElementById(id);
 const fmt = s => (s == null || isNaN(s)) ? "—" : `${Math.floor(s / 60)}:${String(Math.floor(s % 60)).padStart(2, "0")}`;
-const PLAN_SHORT = { lh: "신축 LH 84㎡형", bs: "구축 백송 5단지형" };
+const PLAN_SHORT = { lh: "유형 A · 2020년대 4베이 확장형", bs: "유형 B · 1990년대 계단실형", nb: "유형 C · 타워형 (학습 제외)" };   // plans.json에 short가 없을 때의 대비
 const GROWTH_KO = { medium: "보통", fast: "빠름", ultrafast: "매우 빠름" };
 
 // ───────────────────────── 공통: 평면 그리기 ─────────────────────────
@@ -436,9 +436,14 @@ function lvThinkRender() {
   const state = lv.t >= c.t_end ? "비교 중" : warn ? "경고 중" : t < 10 ? (lv.playing ? "수집 중" : "대기") : (lv.thoughts.some(x => x.kind === "inf") ? "추론 중" : "관찰 중");
   st.textContent = state; st.classList.toggle("warn", state === "경고 중");
   dot.classList.toggle("on", lv.playing);
-  const items = lv.thoughts.slice(-18);
-  body.innerHTML = (items.length ? "" : `<div class="th idle">▶ 재생을 누르면 AI가 매초 무엇을 보고 어떻게 판단하는지 여기에 적힙니다.</div>`) +
-    items.map(x => `<div class="th ${x.kind}"><span class="tt">${fmt(x.t)}</span><span>${x.text}</span></div>`).join("");
+  // 재생 중에는 매 프레임 불리므로, 새 줄이 생겼을 때만 DOM을 바꾼다 (매번 다시 그리면 등장 애니메이션이 계속 처음으로 돌아가 글이 안 보임)
+  const key = `${lv.c.id}|${lv.thoughts.length}`;
+  if (body.dataset.key === key) return;
+  const prevN = body.dataset.key && body.dataset.key.split("|")[0] === lv.c.id ? +body.dataset.key.split("|")[1] : 0;
+  body.dataset.key = key;
+  const start = Math.max(0, lv.thoughts.length - 18);
+  body.innerHTML = (lv.thoughts.length ? "" : `<div class="th idle">▶ 재생을 누르면 AI가 매초 무엇을 보고 어떻게 판단하는지 여기에 적힙니다.</div>`) +
+    lv.thoughts.slice(start).map((x, i) => `<div class="th ${x.kind}${start + i >= prevN ? " new" : ""}"><span class="tt">${fmt(x.t)}</span><span>${x.text}</span></div>`).join("");
   body.scrollTop = 1e6;
 }
 
@@ -579,7 +584,7 @@ function lvLoop(ts) {
   const dt = (ts - lv.last) / 1000; lv.last = ts;
   lv.t = Math.min(lv.t + dt * lv.speed, lv.c.t_end);
   lvRender();
-  if (lv.t >= lv.c.t_end) { lv.playing = false; $("lv-play").textContent = "▶ 재생"; return; }
+  if (lv.t >= lv.c.t_end) { lv.playing = false; $("lv-play").textContent = "▶ 재생"; lvThinkRender(); return; }
   lv.raf = requestAnimationFrame(lvLoop);
 }
 
@@ -603,7 +608,7 @@ function lvSetup() {
   lv.refreshReveal = revealRefresh;
   revealRefresh();
   $("lv-play").onclick = () => {
-    if (lv.playing) { lv.playing = false; $("lv-play").textContent = "▶ 재생"; return; }
+    if (lv.playing) { lv.playing = false; $("lv-play").textContent = "▶ 재생"; lvThinkRender(); return; }
     if (lv.t >= lv.c.t_end) { lv.t = 0; lv.log = []; lv.flags = {}; lv.preds = []; lv.logT = -1; lv.thoughts = []; }
     lv.playing = true; lv.last = performance.now(); $("lv-play").textContent = "⏸ 멈춤";
     lv.raf = requestAnimationFrame(lvLoop);

@@ -5,7 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FlashCount — 아파트 화재 골든타임 예측 AI</title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
-<link rel="stylesheet" href="style.css">
+<link rel="stylesheet" href="style.css?v=20261028c">
 </head>
 <body>
 <header>
@@ -143,10 +143,10 @@
       <div class="card">
         <h2>어떻게 만들었나</h2>
         <ol class="tight" style="padding-left:20px">
-          <li><b>자체 데이터셋 생성</b>: 한국 아파트 평면 2개(신축 LH트릴로채 84㎡형, 구축 백송마을5단지형)를 FDS 6.11로 모델링. 불난 방 5곳 × 화원 위치 × 문 열림/닫힘 × 창 열림/닫힘 × 성장 속도 3 × 최대 크기 2 → <b>228건</b>, 계산 약 27시간.</li>
+          <li><b>자체 데이터셋 생성</b>: 한국 아파트 평면 2개(유형 A: 2020년대 4베이 발코니 확장형 LH트릴로채 111A-1 / 유형 B: 1990년대 계단실형 발코니 비확장 일산 백송마을5단지)를 FDS 6.11로 모델링. 불난 방 5곳 × 화원 위치 × 문 열림/닫힘 × 창 열림/닫힘 × 성장 속도 3 × 최대 크기 2 → <b>228건</b>, 계산 약 27시간.</li>
           <li><b>정답 만들기</b>: 방마다 1.8 m 높이의 온도·가시거리·CO·O₂로 피난 불가 시각, 화원 방 상층 600°C로 플래시오버 시각.</li>
           <li><b>AI 학습</b>: 입력은 방별 천장 온도 최근 60초뿐. GRU(은닉 64, 2층, 파라미터 39,951개)가 ① 방별 피난 불가까지 남은 초 ② 플래시오버까지 남은 초 ③ 화원 방 확률을 동시에 출력. 학습 예시 20,903개, 조기 종료 72에포크.</li>
-          <li><b>평가는 케이스 단위로 분리</b>(같은 화재의 앞뒤가 학습·평가에 섞이지 않게): A 처음 보는 조건, B 처음 보는 방, C 처음 보는 평면(신축으로 학습 → 구축 평가).</li>
+          <li><b>평가는 케이스 단위로 분리</b>(같은 화재의 앞뒤가 학습·평가에 섞이지 않게): A 처음 보는 조건, B 처음 보는 방, C 처음 보는 평면(유형 A로 학습 → 유형 B 평가).</li>
         </ol>
       </div>
       <div class="card">
@@ -161,7 +161,7 @@
           <tr><th>평가</th><th class="num">피난 가능 시간<br>오차 30초 이내</th><th class="num">화원 방<br>정답률</th></tr>
           <tr><td>A 처음 보는 조건 (45건)</td><td class="num">93%</td><td class="num">99%</td></tr>
           <tr><td>B 처음 보는 방 (침실 1곳씩 제외하고 학습)</td><td class="num">87%</td><td class="num">84%</td></tr>
-          <tr><td>C 처음 보는 평면 (신축 학습 → 구축 평가)</td><td class="num">92%</td><td class="num">98%</td></tr>
+          <tr><td>C 처음 보는 평면 (유형 A 학습 → 유형 B 평가)</td><td class="num">92%</td><td class="num">98%</td></tr>
         </table>
         <h3>실제로 쓰일 상황만 따로 보면 (평가 A, 비교 기준 = 센서 없이 경과 시간만 아는 방식)</h3>
         <table>
@@ -198,8 +198,8 @@
 <footer>2026 AI 라이프 솔루션 챌린지 출품작 · 강준혁 (충북대학교 안전공학과) · FDS 6.11.1 · PyTorch GRU · 이 페이지의 AI 계산은 모두 브라우저 안에서 실행됩니다.</footer>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
-<script src="gru.js"></script>
-<script src="view3d.js"></script>
-<script src="app.js"></script>
+<script src="gru.js?v=20261028c"></script>
+<script src="view3d.js?v=20261028c"></script>
+<script src="app.js?v=20261028c"></script>
 </body>
 </html>

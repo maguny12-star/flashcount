@@ -104,6 +104,7 @@
     <div>
       <div class="seg plantabs" id="lv-plantabs"></div>
       <div id="lv-live-area">
+      <div class="banner hidden" id="lv-custombar"></div>
       <div class="card viewcard" id="lv-card">
         <div class="viewtoggle"><h2 id="lv-title" style="margin:0">평면 — AI가 본 방별 남은 시간</h2><div class="tools"><div class="seg" id="lv-viewmode"></div><button class="iconbtn" id="lv-full" title="전체화면 (Esc로 나가기)">⛶</button></div></div>
         <div class="viewwrap">
@@ -159,7 +160,7 @@
           <li><b>평가는 케이스 단위로 분리</b>(같은 화재의 앞뒤가 학습·평가에 섞이지 않게): A 처음 보는 조건, B 처음 보는 방, C 처음 보는 평면(유형 A로 학습 → 유형 B 평가). 유형 C(타워형)는 학습·검증에 전혀 쓰지 않은 평면 단위 평가용.</li>
           <li><b>플래시오버 표시</b>: AI가 잘 맞히는 구간은 직전 1분이라, 화면에는 AI 출력에 <b>화원 방 천장 500°C 보조 판정</b>을 더해 '임박'을 표시하고, 경고 뒤 60초가 지나면 '발생 추정'으로 고정합니다(그 뒤 구간은 학습 범위 밖).</li>
           <li><b>피난 골든타임</b> = 탈출 통로(현관·복도)가 막히기까지 남은 시간. 시나리오 탭은 FDS 결과, 실시간 탭은 AI 예측으로 계산.</li>
-          <li><b>사용자 지정(이론값)</b>: 방 크기·개구부·화재 조건을 넣으면 FDS 정답 대신 SFPE 상관식(Thomas 플래시오버, MQH 상층 온도, Heskestad 플룸)으로 보수적 이론값을 계산하고, 그 온도를 AI에 넣었을 때의 반응을 참고로 보여 줍니다.</li>
+          <li><b>사용자 지정(평면 직접 그리기)</b>: 0.2 m 격자에 방·문·창·화원을 그리면 FDS 정답 대신 SFPE 상관식(Thomas 플래시오버, MQH 상층 온도, Heskestad 플룸)으로 불난 방 이론값을 보수적으로 계산하고, 다른 방은 문·트임 연결 거리로 줄이고 늦춘 근사 온도를 만들어 AI에 넣어 실시간 탭과 똑같이 재생합니다. 방 수·배치가 학습 평면과 많이 다르면 AI 반응이 흔들릴 수 있습니다(학습 범위 밖) — "발전 방향 시연"으로 보세요.</li>
         </ol>
       </div>
       <div class="card">
@@ -213,7 +214,7 @@
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="gru.js?v=20261028d"></script>
 <script src="view3d.js?v=20261028d"></script>
-<script src="custom.js?v=20261028d"></script>
-<script src="app.js?v=20261028d"></script>
+<script src="custom.js?v=20261028e"></script>
+<script src="app.js?v=20261028e"></script>
 </body>
 </html>

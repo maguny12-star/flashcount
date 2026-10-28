@@ -201,10 +201,12 @@ function openFirePop(ev, which) {
     : { plan: lv.c.plan, room: lv.c.fire_room, spot: lv.c.spot, door: lv.c.door_open, win: lv.c.window_open, growth: lv.c.growth, q: lv.c.q_mw };
   const p = PLANS[st.plan], view = which === "sc" ? sc.view : lv.view;
   const container = view.mode === "3d" ? $(`${which}-3d`) : $(`${which}-2d`);
-  const ok = patch => !!CASE_BY_ID[caseIdOf(st.plan, st.room, patch.spot ?? st.spot, patch.door ?? st.door, patch.win ?? st.win, patch.growth ?? st.growth, patch.q ?? st.q)];
+  const theory = which === "lv" && lv.c.split === "theory";
+  const ok = patch => theory || !!CASE_BY_ID[caseIdOf(st.plan, st.room, patch.spot ?? st.spot, patch.door ?? st.door, patch.win ?? st.win, patch.growth ?? st.growth, patch.q ?? st.q)];
   const apply = patch => {
     const n = { ...st, ...patch };
     if (which === "sc") { Object.assign(sc, { room: n.room, spot: n.spot, door: n.door, win: n.win, growth: n.growth, q: n.q, t: 0 }); scRender(); }
+    else if (theory) { closePop(); CUSTOM.rebuild({ door: n.door, win: n.win, growth: n.growth, q: n.q }); return; }
     else {
       const id = caseIdOf(n.plan, n.room, n.spot, n.door, n.win, n.growth, n.q);
       if (!CASE_BY_ID[id]) { toast("이 조합은 계산된 사례가 없습니다"); return; }
@@ -286,7 +288,7 @@ function scRender() {
   const isDoor = p.door_rooms.includes(sc.room);
   const isCook = sc.room === p.cooktop[0] && sc.spot === p.cooktop[1];
   const has = patch => !!CASE_BY_ID[caseIdOf(sc.plan, sc.room, patch.spot ?? sc.spot, patch.door ?? sc.door, patch.win ?? sc.win, patch.growth ?? sc.growth, patch.q ?? sc.q)];
-  seg($("sc-plan"), Object.keys(PLANS).map(k => { const has = CASES.some(c => c.plan === k); return { value: k, label: (PLANS[k].label || planShort(k)) + (has ? "" : " · 계산 중"), disabled: !has }; }), sc.plan, v => { sc.plan = v; sc.t = 0; scRender(); });
+  seg($("sc-plan"), Object.keys(PLANS).filter(k => !PLANS[k].custom).map(k => { const has = CASES.some(c => c.plan === k); return { value: k, label: (PLANS[k].label || planShort(k)) + (has ? "" : " · 계산 중"), disabled: !has }; }), sc.plan, v => { sc.plan = v; sc.t = 0; scRender(); });
   seg($("sc-room"), roomsWithCases(sc.plan).map(r => ({ value: r, label: p.room_ko[r] })), sc.room, v => { sc.room = v; sc.spot = 0; sc.t = 0; scRender(); });
   const spots = p.fire[sc.room];
   seg($("sc-spot"), spots.map((_, i) => ({ value: i, label: spots.length > 1 ? `화원 ${i + 1}` : "1곳", disabled: !has({ spot: i }) })), sc.spot, v => { sc.spot = +v; sc.t = 0; scRender(); });
@@ -389,6 +391,13 @@ function lvCaseLabel(c, i) {
 // 실시간 탭에서 3D·평면도를 클릭했을 때: 조건을 바꿔 그 사례를 불러온다 (학습에 쓴 사례면 그렇다고 표시)
 function lvPick(ev) {
   const c = lv.c, p = PLANS[c.plan];
+  if (c.split === "theory") {   // 사용자 지정: 정답이 없으니 조건을 바꿔 이론 사례를 다시 만든다
+    if (ev.kind === "room") { if (ev.room === c.fire_room) openFirePop(ev, "lv"); else CUSTOM.rebuild({ room: ev.room }); }
+    else if (ev.kind === "door") { if (ev.room !== c.fire_room) { toast("불난 방의 문만 조건입니다"); return; } CUSTOM.rebuild({ door: !c.door_open }); }
+    else if (ev.kind === "window") { if (ev.room !== c.fire_room) { toast("불난 방의 창만 조건입니다"); return; } CUSTOM.rebuild({ win: !c.window_open }); }
+    else openFirePop(ev, "lv");
+    return;
+  }
   const go = (patch, msg) => {
     const n = { room: c.fire_room, spot: c.spot, door: c.door_open, win: c.window_open, growth: c.growth, q: c.q_mw, ...patch };
     const id = caseIdOf(c.plan, n.room, n.spot, n.door, n.win, n.growth, n.q);
@@ -542,7 +551,9 @@ function lvRender() {
     lv.view.setPick(lvPick);
     viewModeSeg($("lv-viewmode"), lv.view, closePop);
   }
-  $("lv-casenote").textContent = c.split === "test" ? "학습에 쓰지 않은 평가용 사례" : c.split === "new" ? "학습에 전혀 안 쓴 평면 — 평면 단위 평가" : "⚠ 학습에 쓴 사례 — 참고용(평가 아님). 3D·평면도를 클릭해 조건을 바꾸면 이렇게 됩니다";
+  $("lv-casenote").textContent = c.split === "test" ? "학습에 쓰지 않은 평가용 사례" : c.split === "new" ? "학습에 전혀 안 쓴 평면 — 평면 단위 평가" : c.split === "theory" ? "사용자 지정 평면 — FDS 정답 없음. 입력 온도는 구역 모델 근사, 비교표의 '정답'은 이론값(보수적)" : "⚠ 학습에 쓴 사례 — 참고용(평가 아님). 3D·평면도를 클릭해 조건을 바꾸면 이렇게 됩니다";
+  const bar = $("lv-custombar"); bar.classList.toggle("hidden", c.split !== "theory");
+  if (c.split === "theory") bar.innerHTML = `<b>사용자 지정 평면 시연</b> — 정답(FDS) 없음. 3D에서 방·문·창을 클릭하면 조건을 바꿔 다시 만듭니다. 비교표의 정답 자리는 이론값(보수적). <button class="btn secondary small" id="lv-toeditor" style="margin-left:8px">✎ 편집기로 돌아가기</button>`, $("lv-toeditor").onclick = () => CUSTOM.openEditor();
   const v = lv.view;
   v.setFire(lv.reveal ? c.fire_room : null, c.spot);
   for (const r of p.door_rooms) v.setDoor(r, lv.reveal ? (r === c.fire_room ? c.door_open : true) : true);
@@ -642,8 +653,10 @@ function lvResult() {
   const at30 = lv.preds[30] || lv.preds[lv.preds.length - 1];
   const topIdx = at30 ? at30.room.indexOf(Math.max(...at30.room)) : -1;
   const foW = firstT((pr, k) => pr.fo < 60 || lvHotT(k) >= 500);   // AI 경고 또는 온도 기준 보조 판정
-  $("lv-result").innerHTML = `<table><tr><th>방</th><th class="num">AI "60초 안" 경고</th><th class="num">AI "피난 불가"</th><th class="num">FDS 실제 피난 불가</th><th>판정</th></tr>${rows}</table>
-    <table style="margin-top:10px"><tr><th></th><th>AI</th><th>FDS 정답</th></tr>
+  const truth = c.split === "theory" ? "이론값(근사)" : "FDS 정답";
+  $("lv-result-card").querySelector("h2").textContent = `AI 예측 vs ${truth}`;
+  $("lv-result").innerHTML = `<table><tr><th>방</th><th class="num">AI "60초 안" 경고</th><th class="num">AI "피난 불가"</th><th class="num">${c.split === "theory" ? "이론 피난 불가" : "FDS 실제 피난 불가"}</th><th>판정</th></tr>${rows}</table>
+    <table style="margin-top:10px"><tr><th></th><th>AI</th><th>${truth}</th></tr>
     <tr><td>화원 방 (화재 30초 시점)</td><td>${topIdx >= 0 && p.slots[topIdx] ? p.room_ko[p.slots[topIdx]] + ` (${Math.round(at30.room[topIdx] * 100)}%)` : "—"}</td><td>${p.room_ko[c.fire_room]} ${topIdx >= 0 && p.slots[topIdx] === c.fire_room ? "✓" : "✗"}</td></tr>
     <tr><td>플래시오버 "60초 안" 경고 (AI + 천장 500°C 보조)</td><td>${foW == null ? "경고 없음" : fmt(foW)}</td><td>${c.t_flashover == null ? "안 일어남" + (foW == null ? " ✓" : " (헛경고)") : fmt(c.t_flashover) + (foW == null ? " (놓침)" : ` (경고 ${Math.round(c.t_flashover - foW)}초 전)`)}</td></tr></table>`;
 }
@@ -677,15 +690,11 @@ function lvLoop(ts) {
 
 // 보기 창 위의 평면 탭: 유형 A / B / C(계산 전엔 비활성) / 사용자 지정(이론값)
 function lvPlanTabs() {
-  const items = Object.keys(PLANS).map(k => { const has = CASES.some(c => c.plan === k && (c.split === "test" || c.split === "new")); return { value: k, label: planShort(k) + (has ? "" : " · 계산 중"), disabled: !has }; });
-  items.push({ value: "custom", label: "사용자 지정 (이론값)" });
-  seg($("lv-plantabs"), items, lv.custom ? "custom" : lv.c.plan, v => {
+  const items = Object.keys(PLANS).filter(k => !PLANS[k].custom).map(k => { const has = CASES.some(c => c.plan === k && (c.split === "test" || c.split === "new")); return { value: k, label: planShort(k) + (has ? "" : " · 계산 중"), disabled: !has }; });
+  items.push({ value: "custom", label: "사용자 지정 (직접 그리기 · 이론값)" });
+  seg($("lv-plantabs"), items, lv.custom || lv.c.plan === "custom" ? "custom" : lv.c.plan, v => {
     closePop();
-    if (v === "custom") {
-      if (lv.playing) lvTogglePlay();
-      lv.custom = true; $("lv-live-area").classList.add("hidden"); $("lv-custom").classList.remove("hidden");
-      CUSTOM.show($("lv-custom")); lvPlanTabs(); return;
-    }
+    if (v === "custom") { CUSTOM.openEditor(); return; }
     lv.custom = false; $("lv-live-area").classList.remove("hidden"); $("lv-custom").classList.add("hidden");
     if (lv.c.plan !== v) {
       const first = CASES.filter(c => c.plan === v && (c.split === "test" || c.split === "new")).sort((a, b) => a.id.localeCompare(b.id))[0];

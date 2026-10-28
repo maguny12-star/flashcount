@@ -1,0 +1,190 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>FlashCount — 아파트 화재 골든타임 예측 AI</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<header>
+  <div class="top">
+    <h1>FlashCount <small>플래시카운트</small></h1>
+    <div class="sub">아파트 화재 골든타임 예측 AI — 방마다 달린 천장 온도 센서만 보고, 방별 피난 가능 시간·플래시오버·화원 위치를 실시간으로 예측합니다.</div>
+  </div>
+</header>
+<nav><div class="tabs">
+  <button data-tab="scenario" class="on">① 시나리오 보기</button>
+  <button data-tab="live">② 실시간 AI 예측</button>
+  <button data-tab="method">③ 방법·성능·한계</button>
+</div></nav>
+
+<main>
+<!-- ───────── ① 시나리오 ───────── -->
+<section class="tab on" id="tab-scenario">
+  <div class="banner blue">화재 조건을 고르면 FDS(미국 NIST 화재 시뮬레이터)로 계산한 228건 중 해당 건의 결과를 보여 줍니다. 시간을 움직여 방별 피난 가능 여부가 어떻게 바뀌는지 보세요. <b>AI 예측은 ② 탭</b>에서 봅니다.</div>
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>화재 조건</h2>
+        <div class="field"><label>평면</label><div class="seg" id="sc-plan"></div></div>
+        <div class="field"><label>불이 난 방</label><div class="seg" id="sc-room"></div></div>
+        <div class="field"><label>화원 위치</label><div class="seg" id="sc-spot"></div><div class="note" id="sc-spot-note"></div></div>
+        <div class="field"><label>불난 방의 문</label><div class="seg" id="sc-door"></div><div class="note" id="sc-door-note"></div></div>
+        <div class="field"><label>불난 방의 창</label><div class="seg" id="sc-win"></div></div>
+        <div class="field"><label>불이 커지는 속도</label><div class="seg" id="sc-growth"></div><div class="note" id="sc-growth-note"></div></div>
+        <div class="field"><label>최대 화재 크기</label><div class="seg" id="sc-q"></div></div>
+        <div class="note" id="sc-caseid"></div>
+      </div>
+      <div class="card" id="sc-compare-card">
+        <h2>문을 닫으면?</h2>
+        <div id="sc-compare"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h2 id="sc-title">평면</h2>
+        <div class="plan-wrap"><svg id="sc-svg"></svg></div>
+        <div class="legend">
+          <span style="--c:#cfe8d6">안전 (계산 시간 안에 피난 불가 안 옴)</span>
+          <span style="--c:#ffe082">피난 불가까지 3분 이내</span>
+          <span style="--c:#ffab40">1분 이내</span>
+          <span style="--c:#e53935">피난 불가 (1.8 m 높이에서 온도 60°C↑ · 가시거리 5 m↓ · CO 1,400 ppm↑ · O₂ 15%↓ 중 하나)</span>
+        </div>
+        <div class="timebar">
+          <button class="btn secondary" id="sc-play">▶ 재생</button>
+          <input type="range" id="sc-time" min="0" max="600" value="0" step="1">
+          <div class="t" id="sc-tlabel">0:00</div>
+        </div>
+        <div class="cards3" id="sc-stats"></div>
+      </div>
+      <div class="card">
+        <h2>방별 사건 시각 (FDS 결과)</h2>
+        <table id="sc-table"></table>
+        <div class="note">열감지기 = 천장 열감지기 작동(링크 온도 70°C). 피난 불가 = 호흡 높이 1.8 m에서 네 기준 중 하나라도 넘은 첫 시각. 빈칸 = 계산 시간 안에 안 일어남.</div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── ② 실시간 ───────── -->
+<section class="tab" id="tab-live">
+  <div class="banner">AI는 <b>방마다 천장 온도 센서 값(최근 60초)</b>만 받습니다. 어느 방에 불이 났는지, 문·창이 열렸는지, 불이 얼마나 빨리 커지는지는 <b>알려주지 않습니다.</b> 재생하면 학습된 GRU 순환신경망이 이 브라우저 안에서 매초 직접 계산합니다.</div>
+  <div class="grid">
+    <div>
+      <div class="card">
+        <h2>화재 고르기</h2>
+        <div class="field"><label>학습에 쓰지 않은 화재(평가용 45건) 중에서</label>
+          <select id="lv-case" style="width:100%;font-size:14px;padding:6px"></select></div>
+        <div class="seg" style="margin-bottom:10px">
+          <button class="btn" id="lv-play">▶ 재생</button>
+          <button class="btn secondary" id="lv-reset">처음부터</button>
+        </div>
+        <div class="field"><label>재생 속도</label><div class="seg" id="lv-speed"></div></div>
+        <div class="field"><label>정답(FDS 결과) 표시</label><div class="seg" id="lv-reveal"></div>
+          <div class="note">시연 때는 가린 채 재생하고, 끝난 뒤 공개해 비교하세요.</div></div>
+      </div>
+      <div class="card">
+        <h2>AI: 어느 방에 불이 났나?</h2>
+        <div class="probs" id="lv-probs"></div>
+      </div>
+      <div class="card">
+        <h2>AI 경고 기록</h2>
+        <div class="log" id="lv-log"></div>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h2 id="lv-title">평면 — AI가 본 방별 남은 시간</h2>
+        <div class="plan-wrap"><svg id="lv-svg"></svg></div>
+        <div class="timebar">
+          <div class="t" style="min-width:auto">경과</div>
+          <input type="range" id="lv-time" min="0" max="600" value="0" step="1">
+          <div class="t" id="lv-tlabel">0:00</div>
+        </div>
+        <div class="kpi" id="lv-kpi"></div>
+      </div>
+      <div class="card">
+        <h2>센서 입력: 방별 천장 온도 (°C)</h2>
+        <canvas class="chart" id="lv-chart"></canvas>
+      </div>
+      <div class="card" id="lv-result-card">
+        <h2>AI 예측 vs FDS 정답</h2>
+        <div id="lv-result"><div class="note">재생이 끝나거나 '정답 표시'를 켜면 비교표가 나옵니다.</div></div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ───────── ③ 방법 ───────── -->
+<section class="tab" id="tab-method">
+  <div class="two">
+    <div>
+      <div class="card">
+        <h2>왜 필요한가</h2>
+        <ul class="tight">
+          <li>시뮬레이션 228건 <b>모두</b>에서 불난 방은 천장 열감지기가 울리기 전(중앙값 79초)에 이미 피난이 어려워졌습니다(중앙값 30초, 원인은 연기로 앞이 안 보임).</li>
+          <li>침실 화재에서 <b>방문을 닫으면 다른 방은 끝까지 안전</b>(0%)했고, 열어 두면 모든 방이 평균 1분 20초 만에 피난 불가가 됐습니다.</li>
+          <li>그래서 "불이 났다"가 아니라 <b>"어느 방이 몇 초 뒤에 못 나오게 되는지"</b>를 알려 주는 AI를 만들었습니다.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2>어떻게 만들었나</h2>
+        <ol class="tight" style="padding-left:20px">
+          <li><b>자체 데이터셋 생성</b>: 한국 아파트 평면 2개(신축 LH트릴로채 84㎡형, 구축 백송마을5단지형)를 FDS 6.11로 모델링. 불난 방 5곳 × 화원 위치 × 문 열림/닫힘 × 창 열림/닫힘 × 성장 속도 3 × 최대 크기 2 → <b>228건</b>, 계산 약 27시간.</li>
+          <li><b>정답 만들기</b>: 방마다 1.8 m 높이의 온도·가시거리·CO·O₂로 피난 불가 시각, 화원 방 상층 600°C로 플래시오버 시각.</li>
+          <li><b>AI 학습</b>: 입력은 방별 천장 온도 최근 60초뿐. GRU(은닉 64, 2층, 파라미터 39,951개)가 ① 방별 피난 불가까지 남은 초 ② 플래시오버까지 남은 초 ③ 화원 방 확률을 동시에 출력. 학습 예시 20,903개, 조기 종료 72에포크.</li>
+          <li><b>평가는 케이스 단위로 분리</b>(같은 화재의 앞뒤가 학습·평가에 섞이지 않게): A 처음 보는 조건, B 처음 보는 방, C 처음 보는 평면(신축으로 학습 → 구축 평가).</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h2>새 아파트 평면은?</h2>
+        <p style="margin:0">방 배치(벽·문·창 좌표)를 입력하면 시뮬레이션 생성 → 계산 → 정답 추출 → 학습까지 자동으로 돌아갑니다(PC 한 대, 약 하루). 이 데모의 두 평면도 그 파이프라인으로 만들었습니다. 도면 이미지를 자동으로 읽는 기능은 범위 밖입니다.</p>
+      </div>
+    </div>
+    <div>
+      <div class="card">
+        <h2>성능 (학습에 쓰지 않은 화재로 평가)</h2>
+        <table>
+          <tr><th>평가</th><th class="num">피난 가능 시간<br>오차 30초 이내</th><th class="num">화원 방<br>정답률</th></tr>
+          <tr><td>A 처음 보는 조건 (45건)</td><td class="num">93%</td><td class="num">99%</td></tr>
+          <tr><td>B 처음 보는 방 (침실 1곳씩 제외하고 학습)</td><td class="num">87%</td><td class="num">84%</td></tr>
+          <tr><td>C 처음 보는 평면 (신축 학습 → 구축 평가)</td><td class="num">92%</td><td class="num">98%</td></tr>
+        </table>
+        <h3>실제로 쓰일 상황만 따로 보면 (평가 A, 비교 기준 = 센서 없이 경과 시간만 아는 방식)</h3>
+        <table>
+          <tr><th></th><th class="num">AI</th><th class="num">경과 시간만</th></tr>
+          <tr><td>끝까지 안전한 방을 '안전'으로 판단</td><td class="num">97%</td><td class="num">5%</td></tr>
+          <tr><td>"60초 안에 피난 불가" 경고 — 놓침</td><td class="num">17%</td><td class="num">21%</td></tr>
+          <tr><td>"60초 안에 피난 불가" 경고 — 헛경고</td><td class="num">15%</td><td class="num">80%</td></tr>
+          <tr><td>플래시오버 직전 1분, 오차 30초 이내</td><td class="num">66~74%</td><td class="num">4~12%</td></tr>
+          <tr><td>화원 방 정답률 (화재 후 30초 이후)</td><td class="num">100%</td><td class="num">—</td></tr>
+        </table>
+      </div>
+      <div class="card">
+        <h2>한계 (정직하게)</h2>
+        <ul class="tight">
+          <li><b>시뮬레이션 데이터</b>로 만들고 평가했습니다. 실제 화재 데이터로 검증하지 않았습니다.</li>
+          <li>플래시오버를 <b>2분 이상 앞</b>에서 맞히지는 못합니다(평균 오차 약 2분). 불이 얼마나 빨리 커질지는 초반 온도에 거의 드러나지 않기 때문입니다. "직전 1분 경고"로 쓰는 것이 맞습니다.</li>
+          <li>연기가 다른 방으로 번질 때 그 시각을 늦게 말하는 경향이 있습니다(연기가 오기 전엔 그 방 온도가 그대로라서).</li>
+          <li>전제: 방마다 온도를 보내는 센서(아날로그식 열감지기·IoT 온도센서), 스프링클러 없음/미작동, 버너 1개(가구로 번지는 과정 미반영), 문틈 누기·유리창 파손 미반영, 가구 없음, 층고 2.4 m.</li>
+        </ul>
+      </div>
+      <div class="card">
+        <h2>자료</h2>
+        <ul class="tight">
+          <li>판정 기준: 국내 성능위주설계 피난 허용 기준(호흡한계선 1.8 m, 온도 60°C, 가시거리 5 m, CO 1,400 ppm, O₂ 15%), 플래시오버 상층 600°C</li>
+          <li>조리 화재 곡선 근거: NIST TN 2133 · 연료: 폴리우레탄(SFPE 핸드북 중간값)</li>
+          <li>선행 연구: NIST P-Flash(2021), FlashNet — 차별점은 한국 아파트 평면, 문 닫힘 조건, 플래시오버뿐 아니라 방별 피난 가능 시간</li>
+          <li>코드·데이터: <a id="repo-link" href="#">GitHub 저장소</a></li>
+        </ul>
+      </div>
+    </div>
+  </div>
+</section>
+</main>
+<footer>2026 AI 라이프 솔루션 챌린지 출품작 · 강준혁 (충북대학교 안전공학과) · FDS 6.11.1 · PyTorch GRU · 이 페이지의 AI 계산은 모두 브라우저 안에서 실행됩니다.</footer>
+<script src="gru.js"></script>
+<script src="app.js"></script>
+</body>
+</html>

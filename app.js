@@ -25,7 +25,7 @@ function makePlanView(svg, plan) {
   for (const m of plan.meshes) rect(m, { fill: "#ffffff" }, gFloor);
   const rooms = {};
   for (const r in plan.rooms) {
-    const node = rect(plan.rooms[r], { fill: "#cfe8d6", "fill-opacity": .9 }, gRooms);
+    const node = rect(plan.rooms[r], { fill: "#2dd4bf", "fill-opacity": .55 }, gRooms);
     const [cx, cy] = plan.centers[r];
     const label = el("text", { x: X(cx), y: Y(cy) - 6, "text-anchor": "middle", class: "room-label" }, gText);
     label.textContent = plan.room_ko[r];
@@ -78,17 +78,50 @@ function makePlanView(svg, plan) {
       w.setAttribute("stroke", open ? "#90caf9" : "#2f6690");
       w.setAttribute("stroke-dasharray", open ? "8 6" : "");
     },
-    setRoom(r, color, text) { rooms[r].node.setAttribute("fill", color); rooms[r].status.textContent = text; },
+    setRoom(r, color, text) { rooms[r].node.setAttribute("fill", color); rooms[r].node.setAttribute("fill-opacity", color === "#2dd4bf" ? .45 : .75); rooms[r].status.textContent = text; },
   };
 }
 
-// 남은 시간 → 색·글자
+// 남은 시간 → [색, 글자, 심각도 0~1(연기 슬래브 두께용)]
 function statusOf(remaining, passedText = "피난 불가") {
-  if (remaining == null) return ["#cfe8d6", "안전"];
-  if (remaining < 5) return ["#e53935", passedText];
-  if (remaining <= 60) return ["#ffab40", `${Math.round(remaining)}초 남음`];
-  if (remaining <= 180) return ["#ffe082", `${Math.round(remaining)}초 남음`];
-  return ["#cfe8d6", `${Math.round(remaining)}초 남음`];
+  if (remaining == null) return ["#2dd4bf", "안전", 0];
+  if (remaining < 5) return ["#ff4d4f", passedText, 1];
+  if (remaining <= 60) return ["#ff8a3d", `${Math.round(remaining)}초 남음`, 0.45 + 0.5 * (1 - remaining / 60)];
+  if (remaining <= 180) return ["#ffd166", `${Math.round(remaining)}초 남음`, 0.12 + 0.33 * (1 - (remaining - 60) / 120)];
+  return ["#2dd4bf", `${Math.round(remaining)}초 남음`, 0.05];
+}
+
+// 2D(SVG) + 3D(three.js)를 같은 명령으로 움직이는 묶음 보기
+function makeView(svgEl, el3d, wrap2d, plan) {
+  const v2 = makePlanView(svgEl, plan);
+  let v3 = null;
+  try { if (window.THREE) v3 = new PlanView3D(el3d, plan); } catch (e) { console.warn("3D 사용 불가", e); }
+  const hint = el3d.querySelector(".hint"); if (hint) el3d.appendChild(hint);
+  const view = {
+    mode: v3 ? "3d" : "2d",
+    setMode(m) { view.mode = v3 && m === "3d" ? "3d" : "2d"; el3d.classList.toggle("hidden", view.mode !== "3d"); wrap2d.classList.toggle("hidden", view.mode === "3d"); if (v3 && view.mode === "3d") v3.resize(); },
+    setFire(r, s) { v2.setFire(r, s); if (v3) v3.setFire(r, s); },
+    setDoor(r, o) { v2.setDoor(r, o); if (v3) v3.setDoor(r, o); },
+    setWindow(r, o) { v2.setWindow(r, o); if (v3) v3.setWindow(r, o); },
+    setRoom(r, c, t, level = 0) { v2.setRoom(r, c, t); if (v3) v3.setRoom(r, c, t, level); },
+    setAIMarker(r) { if (v3) v3.setAIMarker(r); },
+    resize() { if (v3) v3.resize(); },
+    dispose() { if (v3) v3.dispose(); },
+  };
+  view.setMode(view.mode);
+  return view;
+}
+
+// 3D 연기 슬래브 두께: 그 방 천장 온도(센서 입력)로 정함. 25°C → 없음, 225°C 이상 → 바닥 가까이
+function smokeLevel(c, r, t) {
+  const arr = c.tc[r]; if (!arr) return 0;
+  const T = arr[Math.min(Math.max(0, Math.floor(t)), arr.length - 1)] / 10;
+  return Math.max(0, Math.min(1, (T - 25) / 200));
+}
+
+function viewModeSeg(container, view, onChange) {
+  const refresh = () => seg(container, [{ value: "3d", label: "3D" }, { value: "2d", label: "평면도" }], view.mode, m => { view.setMode(m); refresh(); if (onChange) onChange(); });
+  refresh();
 }
 
 function seg(container, items, value, onChange) {
@@ -132,7 +165,12 @@ function scRender() {
   $("sc-caseid").textContent = `케이스 ${c.id}` + (c.split === "test" ? " · AI 학습에 쓰지 않은 평가용" : "");
   $("sc-title").textContent = `${p.title} — ${p.room_ko[sc.room]} 화재`;
 
-  if (sc.viewPlan !== sc.plan) { sc.view = makePlanView($("sc-svg"), p); sc.viewPlan = sc.plan; }
+  if (sc.viewPlan !== sc.plan) {
+    const prevMode = sc.view ? sc.view.mode : "3d";
+    if (sc.view) sc.view.dispose();
+    sc.view = makeView($("sc-svg"), $("sc-3d"), $("sc-2d"), p); sc.view.setMode(prevMode); sc.viewPlan = sc.plan;
+    viewModeSeg($("sc-viewmode"), sc.view);
+  }
   const v = sc.view;
   v.setFire(sc.room, sc.spot);
   for (const r of p.door_rooms) v.setDoor(r, r === sc.room ? sc.door : true);
@@ -167,7 +205,7 @@ function scTick() {
   for (const r in p.rooms) {
     const tu = c.rooms[r].t_untenable;
     const [color, text] = statusOf(tu == null ? null : tu - t);
-    sc.view.setRoom(r, color, text);
+    sc.view.setRoom(r, color, text, smokeLevel(c, r, t));
   }
   $("sc-tlabel").textContent = fmt(t);
   const others = Object.keys(p.rooms).filter(r => r !== sc.room).map(r => c.rooms[r].t_untenable).filter(v => v != null);
@@ -237,18 +275,25 @@ function lvRender() {
   const c = lv.c, p = PLANS[c.plan], t = Math.floor(lv.t);
   lvEnsurePreds(t);
   const pr = lv.preds[t];
-  if (lv.viewPlan !== c.plan) { lv.view = makePlanView($("lv-svg"), p); lv.viewPlan = c.plan; }
+  if (lv.viewPlan !== c.plan) {
+    const prevMode = lv.view ? lv.view.mode : "3d";
+    if (lv.view) lv.view.dispose();
+    lv.view = makeView($("lv-svg"), $("lv-3d"), $("lv-2d"), p); lv.view.setMode(prevMode); lv.viewPlan = c.plan;
+    viewModeSeg($("lv-viewmode"), lv.view);
+  }
   const v = lv.view;
   v.setFire(lv.reveal ? c.fire_room : null, c.spot);
   for (const r of p.door_rooms) v.setDoor(r, lv.reveal ? (r === c.fire_room ? c.door_open : true) : true);
   for (const r in p.windows) v.setWindow(r, lv.reveal && r === c.fire_room && c.window_open);
   p.slots.forEach((r, j) => {
     if (!r) return;
-    if (!pr) { v.setRoom(r, "#e9ecef", "센서 수집 중"); return; }
+    if (!pr) { v.setRoom(r, "#c9ced6", "센서 수집 중", smokeLevel(c, r, t)); return; }
     const rem = pr.ten[j] >= 300 ? null : pr.ten[j];
     const [color, text] = statusOf(rem, "피난 불가 (AI)");
-    v.setRoom(r, color, pr.ten[j] >= 300 ? "안전 (AI)" : text);
+    v.setRoom(r, color, pr.ten[j] >= 300 ? "안전 (AI)" : text, smokeLevel(c, r, t));
   });
+  const topJ = pr ? pr.room.indexOf(Math.max(...pr.room)) : -1;
+  v.setAIMarker(pr && pr.room[topJ] > 0.5 && p.slots[topJ] ? p.slots[topJ] : null);
   $("lv-tlabel").textContent = fmt(t);
   $("lv-time").value = t; $("lv-time").max = c.t_end;
   $("lv-title").textContent = `${p.title} — AI가 본 방별 남은 시간`;
@@ -276,7 +321,7 @@ function lvRender() {
   if (lv.reveal || lv.t >= c.t_end) lvResult(); else $("lv-result").innerHTML = `<div class="note">재생이 끝나거나 '정답 표시'를 켜면 비교표가 나옵니다.</div>`;
 }
 
-const ROOM_COLORS = ["#b8431c", "#2f6690", "#2e8b57", "#8e44ad", "#e67e22", "#7f8c8d", "#1b1d22"];
+const ROOM_COLORS = ["#ff6a3d", "#6fb7ff", "#2dd4bf", "#c084fc", "#ffb020", "#9aa3b2", "#f3f1ec"];
 function lvChart(t) {
   const cv = $("lv-chart"), p = PLANS[lv.c.plan];
   const dpr = window.devicePixelRatio || 1;
@@ -290,7 +335,7 @@ function lvChart(t) {
   p.slots.forEach(r => { if (r) for (let k = 0; k <= t && k < lv.c.tc[r].length; k++) ymax = Math.max(ymax, lv.c.tc[r][k] / 10); });
   ymax = Math.ceil(ymax / 100) * 100;
   const X = x => L + (x / tmax) * (w - L - R), Y = y => T + (1 - (y - 0) / ymax) * (h - T - B);
-  g.strokeStyle = "#e2e5ea"; g.fillStyle = "#5f6672"; g.font = "11px Malgun Gothic"; g.textAlign = "right";
+  g.strokeStyle = "#2a3140"; g.fillStyle = "#9aa3b2"; g.font = "11px Pretendard, Malgun Gothic"; g.textAlign = "right";
   for (let y = 0; y <= ymax; y += ymax / 4) { g.beginPath(); g.moveTo(L, Y(y)); g.lineTo(w - R, Y(y)); g.stroke(); g.fillText(y + "°", L - 4, Y(y) + 4); }
   g.textAlign = "center";
   for (let x = 0; x <= tmax; x += 60) { g.fillText(fmt(x), X(x), h - 6); }
@@ -303,9 +348,9 @@ function lvChart(t) {
   });
   // 범례
   g.textAlign = "left"; let lx = L + 6;
-  p.slots.forEach((r, j) => { if (!r) return; g.fillStyle = ROOM_COLORS[j]; g.fillRect(lx, T + 2, 10, 10); g.fillStyle = "#1b1d22"; g.fillText(p.room_ko[r], lx + 13, T + 11); lx += 13 + g.measureText(p.room_ko[r]).width + 10; });
+  p.slots.forEach((r, j) => { if (!r) return; g.fillStyle = ROOM_COLORS[j]; g.fillRect(lx, T + 2, 10, 10); g.fillStyle = "#eceae4"; g.fillText(p.room_ko[r], lx + 13, T + 11); lx += 13 + g.measureText(p.room_ko[r]).width + 10; });
   // 현재 시각 선
-  g.strokeStyle = "#b8431c"; g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(X(t), T); g.lineTo(X(t), h - B); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = "#ff6a3d"; g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(X(t), T); g.lineTo(X(t), h - B); g.stroke(); g.setLineDash([]);
 }
 
 function lvResult() {
@@ -377,7 +422,8 @@ async function init() {
   document.querySelectorAll("nav button").forEach(b => b.onclick = () => {
     document.querySelectorAll("nav button").forEach(x => x.classList.toggle("on", x === b));
     document.querySelectorAll("section.tab").forEach(s => s.classList.toggle("on", s.id === `tab-${b.dataset.tab}`));
-    if (b.dataset.tab === "live" && lv.c) lvChart(Math.floor(lv.t));
+    if (b.dataset.tab === "live" && lv.c) { lvChart(Math.floor(lv.t)); lv.view.resize(); }
+    if (b.dataset.tab === "scenario" && sc.view) sc.view.resize();
   });
   scSetup();
   lvSetup();

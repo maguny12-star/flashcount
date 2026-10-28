@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FlashCount — 아파트 화재 골든타임 예측 AI</title>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
 <link rel="stylesheet" href="style.css">
 </head>
 <body>
@@ -43,13 +44,14 @@
     </div>
     <div>
       <div class="card">
-        <h2 id="sc-title">평면</h2>
-        <div class="plan-wrap"><svg id="sc-svg"></svg></div>
+        <div class="viewtoggle"><h2 id="sc-title" style="margin:0">평면</h2><div class="seg" id="sc-viewmode"></div></div>
+        <div class="view3d" id="sc-3d"><div class="hint">드래그: 회전 · 휠: 확대 · 연기 슬래브와 바닥 색은 상태 표현</div></div>
+        <div class="plan-wrap hidden" id="sc-2d"><svg id="sc-svg"></svg></div>
         <div class="legend">
-          <span style="--c:#cfe8d6">안전 (계산 시간 안에 피난 불가 안 옴)</span>
-          <span style="--c:#ffe082">피난 불가까지 3분 이내</span>
-          <span style="--c:#ffab40">1분 이내</span>
-          <span style="--c:#e53935">피난 불가 (1.8 m 높이에서 온도 60°C↑ · 가시거리 5 m↓ · CO 1,400 ppm↑ · O₂ 15%↓ 중 하나)</span>
+          <span style="--c:#2dd4bf">안전 (계산 시간 안에 피난 불가 안 옴)</span>
+          <span style="--c:#ffd166">피난 불가까지 3분 이내</span>
+          <span style="--c:#ff8a3d">1분 이내</span>
+          <span style="--c:#ff4d4f">피난 불가 (1.8 m 높이에서 온도 60°C↑ · 가시거리 5 m↓ · CO 1,400 ppm↑ · O₂ 15%↓ 중 하나)</span>
         </div>
         <div class="timebar">
           <button class="btn secondary" id="sc-play">▶ 재생</button>
@@ -95,8 +97,9 @@
     </div>
     <div>
       <div class="card">
-        <h2 id="lv-title">평면 — AI가 본 방별 남은 시간</h2>
-        <div class="plan-wrap"><svg id="lv-svg"></svg></div>
+        <div class="viewtoggle"><h2 id="lv-title" style="margin:0">평면 — AI가 본 방별 남은 시간</h2><div class="seg" id="lv-viewmode"></div></div>
+        <div class="view3d" id="lv-3d"><div class="hint">드래그: 회전 · 휠: 확대 · 주황 고리 = AI가 추정한 화원 방</div></div>
+        <div class="plan-wrap hidden" id="lv-2d"><svg id="lv-svg"></svg></div>
         <div class="timebar">
           <div class="t" style="min-width:auto">경과</div>
           <input type="range" id="lv-time" min="0" max="600" value="0" step="1">
@@ -184,7 +187,10 @@
 </section>
 </main>
 <footer>2026 AI 라이프 솔루션 챌린지 출품작 · 강준혁 (충북대학교 안전공학과) · FDS 6.11.1 · PyTorch GRU · 이 페이지의 AI 계산은 모두 브라우저 안에서 실행됩니다.</footer>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="gru.js"></script>
+<script src="view3d.js"></script>
 <script src="app.js"></script>
 </body>
 </html>

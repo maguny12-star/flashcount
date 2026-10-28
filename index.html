@@ -45,7 +45,7 @@
     <div>
       <div class="card">
         <div class="viewtoggle"><h2 id="sc-title" style="margin:0">평면</h2><div class="seg" id="sc-viewmode"></div></div>
-        <div class="view3d" id="sc-3d"><div class="hint">드래그: 회전 · 휠: 확대 · 연기 슬래브와 바닥 색은 상태 표현</div></div>
+        <div class="view3d" id="sc-3d"><div class="hint">드래그: 회전 · 휠: 확대 · 클릭: 방 = 불난 방 바꾸기, 문·창 = 열림/닫힘, 화원 = 속도·크기 설정</div></div>
         <div class="plan-wrap hidden" id="sc-2d"><svg id="sc-svg"></svg></div>
         <div class="legend">
           <span style="--c:#2dd4bf">안전 (계산 시간 안에 피난 불가 안 옴)</span>
@@ -76,11 +76,13 @@
     <div>
       <div class="card">
         <h2>화재 고르기</h2>
-        <div class="field"><label>학습에 쓰지 않은 화재(평가용 45건) 중에서</label>
-          <select id="lv-case" style="width:100%;font-size:14px;padding:6px"></select></div>
+        <div class="field"><label>학습에 쓰지 않은 화재(평가용) 중에서 — 또는 3D·평면도를 클릭해 직접 조건 설정</label>
+          <select id="lv-case" style="width:100%;font-size:14px;padding:6px"></select>
+          <div class="note" id="lv-casenote"></div></div>
         <div class="seg" style="margin-bottom:10px">
           <button class="btn" id="lv-play">▶ 재생</button>
           <button class="btn secondary" id="lv-reset">처음부터</button>
+          <button class="btn secondary" id="lv-random" title="평가용 사례 중 하나를 무작위로 고릅니다 (조건은 가린 채)">🎲 무작위</button>
         </div>
         <div class="field"><label>재생 속도</label><div class="seg" id="lv-speed"></div></div>
         <div class="field"><label>정답(FDS 결과) 표시</label><div class="seg" id="lv-reveal"></div></div>
@@ -97,8 +99,16 @@
     <div>
       <div class="card">
         <div class="viewtoggle"><h2 id="lv-title" style="margin:0">평면 — AI가 본 방별 남은 시간</h2><div class="seg" id="lv-viewmode"></div></div>
-        <div class="view3d" id="lv-3d"><div class="hint">드래그: 회전 · 휠: 확대 · 주황 고리 = AI가 추정한 화원 방</div></div>
-        <div class="plan-wrap hidden" id="lv-2d"><svg id="lv-svg"></svg></div>
+        <div class="live-main">
+          <div>
+            <div class="view3d" id="lv-3d"><div class="hint">드래그: 회전 · 휠: 확대 · 클릭: 방·문·창으로 조건 바꾸기 · 주황 고리 = AI가 추정한 화원 방</div></div>
+            <div class="plan-wrap hidden" id="lv-2d"><svg id="lv-svg"></svg></div>
+          </div>
+          <div class="think" id="lv-think">
+            <div class="think-h"><span class="dot" id="lv-think-dot"></span><span>AI가 지금 하는 일</span><span class="think-state" id="lv-think-state">대기</span></div>
+            <div class="think-body" id="lv-think-body"></div>
+          </div>
+        </div>
         <div class="timebar">
           <div class="t" style="min-width:auto">경과</div>
           <input type="range" id="lv-time" min="0" max="600" value="0" step="1">

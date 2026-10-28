@@ -61,7 +61,7 @@ class GRUModel {
     const m = Math.max(...logits);
     const ex = Array.from(logits, v => Math.exp(v - m));
     const s = ex.reduce((a, b) => a + b, 0);
-    return { ten, fo, room: ex.map(v => v / s) };
+    return { ten, fo, room: ex.map(v => v / s), h: z };   // h: 마지막 층 은닉 상태 (화면의 'AI가 하는 일' 표시용)
   }
 
   // tcBySlot: 슬롯별 온도 배열(°C, 1초 간격, 없는 방은 null). now: 현재 시각(초). 화재 전 구간은 평상시(0)로 채움

@@ -21,11 +21,15 @@ function makePlanView(svg, plan) {
   const ns = "http://www.w3.org/2000/svg";
   const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
   const rect = (xb, attrs, parent) => el("rect", { x: X(xb[0]), y: Y(xb[3]), width: (xb[1] - xb[0]) * S, height: (xb[3] - xb[2]) * S, ...attrs }, parent);
-  const gFloor = el("g", {}), gRooms = el("g", {}), gSolid = el("g", {}), gDoors = el("g", {}), gWin = el("g", {}), gFire = el("g", {}), gText = el("g", {});
+  const gFloor = el("g", {}), gRooms = el("g", {}), gSolid = el("g", {}), gDoors = el("g", {}), gWin = el("g", {}), gFire = el("g", {}), gText = el("g", { "pointer-events": "none" });
   for (const m of plan.meshes) rect(m, { fill: "#ffffff" }, gFloor);
+  // 클릭 상호작용: 방·문·창·화원을 누르면 onPick({kind, room, x, y})
+  const api = { onPick: null };
+  const pick = (node, data) => { node.classList.add("pick"); node.addEventListener("click", e => { e.stopPropagation(); if (api.onPick) api.onPick({ ...data, x: e.clientX, y: e.clientY }); }); };
   const rooms = {};
   for (const r in plan.rooms) {
     const node = rect(plan.rooms[r], { fill: "#2dd4bf", "fill-opacity": .55 }, gRooms);
+    pick(node, { kind: "room", room: r });
     const [cx, cy] = plan.centers[r];
     const label = el("text", { x: X(cx), y: Y(cy) - 6, "text-anchor": "middle", class: "room-label" }, gText);
     label.textContent = plan.room_ko[r];
@@ -42,23 +46,29 @@ function makePlanView(svg, plan) {
   const doors = {};
   for (const r in plan.doors) {
     const xb = plan.doors[r];
-    doors[r] = { node: rect(xb, { fill: "#ffffff" }, gDoors) };
-    const t = el("text", { x: X((xb[0] + xb[1]) / 2), y: Y((xb[2] + xb[3]) / 2) + 4, "text-anchor": "middle", fill: "#b8431c", "font-size": 11 }, gDoors);
+    const g = el("g", {}, gDoors);
+    doors[r] = { node: rect(xb, { fill: "#ffffff" }, g) };
+    const t = el("text", { x: X((xb[0] + xb[1]) / 2), y: Y((xb[2] + xb[3]) / 2) + 4, "text-anchor": "middle", fill: "#b8431c", "font-size": 11 }, g);
     t.textContent = "문";
     doors[r].text = t;
+    pick(g, { kind: "door", room: r });
   }
   const wins = {};
   for (const r in plan.windows) {
     const xb = plan.windows[r];
-    wins[r] = el("line", { x1: X(xb[0]), y1: Y(xb[2]), x2: X(xb[1]), y2: Y(xb[3]), stroke: "#2f6690", "stroke-width": 7 }, gWin);
+    const g = el("g", {}, gWin);
+    el("line", { x1: X(xb[0]), y1: Y(xb[2]), x2: X(xb[1]), y2: Y(xb[3]), stroke: "transparent", "stroke-width": 22, "pointer-events": "stroke" }, g);   // 클릭 영역
+    wins[r] = el("line", { x1: X(xb[0]), y1: Y(xb[2]), x2: X(xb[1]), y2: Y(xb[3]), stroke: "#2f6690", "stroke-width": 7 }, g);
+    pick(g, { kind: "window", room: r });
   }
   const fire = el("g", { visibility: "hidden" }, gFire);
   const fireRect = el("rect", { width: .6 * S, height: .6 * S, fill: "#e8572a", rx: 4 }, fire);
   const fireText = el("text", { "text-anchor": "middle", fill: "#fff", "font-size": 12, "font-weight": 700 }, fire);
   fireText.textContent = "화원";
+  pick(fire, { kind: "fire" });
   const note = el("text", { x: 8, y: H - 8, "font-size": 12, fill: "#5f6672" }, gText);
-  note.textContent = "파랑: 창   검정: 벽   회색: 계산에서 뺀 공간(욕실 등)";
-  return {
+  note.textContent = "파랑: 창   검정: 벽   회색: 계산에서 뺀 공간(욕실 등)   클릭: 방·문·창·화원 바꾸기";
+  return Object.assign(api, {
     rooms, doors, wins,
     setFire(room, spot) {
       if (room == null) { fire.setAttribute("visibility", "hidden"); return; }
@@ -79,7 +89,7 @@ function makePlanView(svg, plan) {
       w.setAttribute("stroke-dasharray", open ? "8 6" : "");
     },
     setRoom(r, color, text) { rooms[r].node.setAttribute("fill", color); rooms[r].node.setAttribute("fill-opacity", color === "#2dd4bf" ? .45 : .75); rooms[r].status.textContent = text; },
-  };
+  });
 }
 
 // 남은 시간 → [색, 글자, 심각도 0~1(연기 슬래브 두께용)]
@@ -106,11 +116,82 @@ function makeView(svgEl, el3d, wrap2d, plan) {
     setWindow(r, o) { v2.setWindow(r, o); if (v3) v3.setWindow(r, o); },
     setRoom(r, c, t, level = 0) { v2.setRoom(r, c, t); if (v3) v3.setRoom(r, c, t, level); },
     setAIMarker(r) { if (v3) v3.setAIMarker(r); },
+    setPick(fn) { v2.onPick = fn; if (v3) v3.onPick = fn; },
     resize() { if (v3) v3.resize(); },
     dispose() { if (v3) v3.dispose(); },
   };
   view.setMode(view.mode);
   return view;
+}
+
+// ───────────────────────── 공통: 클릭 상호작용 도우미 ─────────────────────────
+const planShort = k => (PLANS[k] && PLANS[k].short) || PLAN_SHORT[k] || k;
+const caseIdOf = (plan, room, spot, door, win, growth, q) => `${plan}_${room}_s${spot}_d${door ? 1 : 0}_w${win ? 1 : 0}_${growth}_${q}MW`;
+const ROOM_CASES = {};
+// 그 평면에서 화원 조건이 실제로 계산된 방 (3번째 평면은 일부 방만 계산)
+function roomsWithCases(plan) {
+  if (!ROOM_CASES[plan]) ROOM_CASES[plan] = Object.keys(PLANS[plan].fire).filter(r => CASES.some(c => c.plan === plan && c.fire_room === r));
+  return ROOM_CASES[plan];
+}
+
+function toast(msg) {
+  let t = $("toast");
+  if (!t) { t = document.createElement("div"); t.id = "toast"; t.className = "toast"; document.body.appendChild(t); }
+  t.textContent = msg; t.classList.add("on");
+  clearTimeout(t._h); t._h = setTimeout(() => t.classList.remove("on"), 2400);
+}
+
+// 클릭한 자리 옆에 뜨는 작은 설정 창. rows: [{label, items, value, onChange}]
+let POP = null;
+function closePop() { if (POP) { POP.remove(); POP = null; } }
+function openPop(container, x, y, title, rows, foot) {
+  closePop();
+  const pop = document.createElement("div"); pop.className = "pop";
+  pop.innerHTML = `<div class="pop-h"><span>${title}</span><button class="pop-x" title="닫기">✕</button></div>`;
+  pop.querySelector(".pop-x").onclick = closePop;
+  for (const r of rows) {
+    const f = document.createElement("div"); f.className = "field";
+    f.innerHTML = `<label>${r.label}</label><div class="seg"></div>`;
+    seg(f.querySelector(".seg"), r.items, r.value, r.onChange);
+    pop.appendChild(f);
+  }
+  if (foot) { const n = document.createElement("div"); n.className = "note"; n.textContent = foot; pop.appendChild(n); }
+  pop.addEventListener("pointerdown", e => e.stopPropagation());
+  container.appendChild(pop);
+  const cr = container.getBoundingClientRect();
+  pop.style.left = Math.max(8, Math.min(x - cr.left + 14, cr.width - pop.offsetWidth - 8)) + "px";
+  pop.style.top = Math.max(8, Math.min(y - cr.top - 12, cr.height - pop.offsetHeight - 8)) + "px";
+  POP = pop;
+}
+document.addEventListener("pointerdown", e => { if (POP && !POP.contains(e.target)) closePop(); });
+
+// 화원을 클릭했을 때: 그 방 화재의 조건(위치·속도·크기·문·창)을 바로 바꾸는 창. which = "sc" | "lv"
+function openFirePop(ev, which) {
+  const st = which === "sc"
+    ? { plan: sc.plan, room: sc.room, spot: sc.spot, door: sc.door, win: sc.win, growth: sc.growth, q: sc.q }
+    : { plan: lv.c.plan, room: lv.c.fire_room, spot: lv.c.spot, door: lv.c.door_open, win: lv.c.window_open, growth: lv.c.growth, q: lv.c.q_mw };
+  const p = PLANS[st.plan], view = which === "sc" ? sc.view : lv.view;
+  const container = view.mode === "3d" ? $(`${which}-3d`) : $(`${which}-2d`);
+  const ok = patch => !!CASE_BY_ID[caseIdOf(st.plan, st.room, patch.spot ?? st.spot, patch.door ?? st.door, patch.win ?? st.win, patch.growth ?? st.growth, patch.q ?? st.q)];
+  const apply = patch => {
+    const n = { ...st, ...patch };
+    if (which === "sc") { Object.assign(sc, { room: n.room, spot: n.spot, door: n.door, win: n.win, growth: n.growth, q: n.q, t: 0 }); scRender(); }
+    else {
+      const id = caseIdOf(n.plan, n.room, n.spot, n.door, n.win, n.growth, n.q);
+      if (!CASE_BY_ID[id]) { toast("이 조합은 계산된 사례가 없습니다"); return; }
+      lv.reveal = true; lvLoad(id);
+    }
+    openFirePop(ev, which);
+  };
+  const rows = [];
+  const spots = p.fire[st.room];
+  if (spots.length > 1) rows.push({ label: "화원 위치", items: spots.map((_, i) => ({ value: i, label: `화원 ${i + 1}`, disabled: !ok({ spot: i }) })), value: st.spot, onChange: v => apply({ spot: +v }) });
+  rows.push({ label: "불이 커지는 속도", items: ["medium", "fast", "ultrafast"].map(g => ({ value: g, label: GROWTH_KO[g], disabled: !ok({ growth: g }) })), value: st.growth, onChange: v => apply({ growth: v }) });
+  rows.push({ label: "최대 화재 크기", items: [2, 4].map(q => ({ value: q, label: `${q} MW`, disabled: !ok({ q }) })), value: st.q, onChange: v => apply({ q: +v }) });
+  if (p.door_rooms.includes(st.room)) rows.push({ label: "이 방의 문", items: [{ value: 1, label: "열림", disabled: !ok({ door: true }) }, { value: 0, label: "닫힘", disabled: !ok({ door: false }) }], value: st.door ? 1 : 0, onChange: v => apply({ door: !!+v }) });
+  rows.push({ label: "이 방의 창", items: [{ value: 0, label: "닫힘", disabled: !ok({ win: false }) }, { value: 1, label: "열림", disabled: !ok({ win: true }) }], value: st.win ? 1 : 0, onChange: v => apply({ win: !!+v }) });
+  openPop(container, ev.x, ev.y, `${p.room_ko[st.room]} 화재 설정`, rows,
+    which === "lv" ? "조건을 바꾸면 '정답 표시'가 켜집니다. 청중에게 가리려면 '가림'으로 돌린 뒤 재생하세요." : "다른 방을 클릭하면 불난 방이 바뀌고, 문·창을 클릭하면 열림/닫힘이 바뀝니다.");
 }
 
 // 3D 연기 슬래브 두께: 그 방 천장 온도(센서 입력)로 정함. 25°C → 없음, 225°C 이상 → 바닥 가까이
@@ -142,35 +223,61 @@ const sc = { plan: "lh", room: "kitchen", spot: 0, door: true, win: false, growt
 
 function scCase() {
   const p = PLANS[sc.plan];
-  if (!p.fire[sc.room]) sc.room = Object.keys(p.fire)[0];
+  const ok = roomsWithCases(sc.plan);
+  if (!ok.includes(sc.room)) sc.room = ok[0];
   if (sc.spot >= p.fire[sc.room].length) sc.spot = 0;
   if (!p.door_rooms.includes(sc.room)) sc.door = true;
-  return CASE_BY_ID[`${sc.plan}_${sc.room}_s${sc.spot}_d${sc.door ? 1 : 0}_w${sc.win ? 1 : 0}_${sc.growth}_${sc.q}MW`];
+  let id = caseIdOf(sc.plan, sc.room, sc.spot, sc.door, sc.win, sc.growth, sc.q);
+  if (!CASE_BY_ID[id]) {   // 그 조합이 계산되지 않았으면(3번째 평면 등) 같은 방의 계산된 사례로 맞춤
+    const alt = CASES.find(c => c.plan === sc.plan && c.fire_room === sc.room && c.spot === sc.spot) || CASES.find(c => c.plan === sc.plan && c.fire_room === sc.room);
+    Object.assign(sc, { spot: alt.spot, door: alt.door_open, win: alt.window_open, growth: alt.growth, q: alt.q_mw });
+    id = alt.id;
+  }
+  return CASE_BY_ID[id];
+}
+
+// 3D·평면도에서 방·문·창·화원을 클릭했을 때
+function scPick(ev) {
+  const p = PLANS[sc.plan];
+  if (ev.kind === "room") {
+    if (!roomsWithCases(sc.plan).includes(ev.room)) { toast(`${p.room_ko[ev.room]}: 화원 조건을 계산하지 않은 공간입니다`); return; }
+    if (ev.room === sc.room) { openFirePop(ev, "sc"); return; }
+    sc.room = ev.room; sc.spot = 0; sc.t = 0; scRender(); toast(`불난 방 → ${p.room_ko[ev.room]}`);
+  } else if (ev.kind === "door") {
+    if (ev.room !== sc.room) { toast(`${p.room_ko[ev.room]} 문: 불난 방의 문만 조건입니다 (다른 방문은 항상 열림)`); return; }
+    sc.door = !sc.door; sc.t = 0; scRender(); toast(`불난 방 문 → ${sc.door ? "열림" : "닫힘"}`);
+  } else if (ev.kind === "window") {
+    if (ev.room !== sc.room) { toast(`${p.room_ko[ev.room]} 창: 불난 방의 창만 조건입니다`); return; }
+    sc.win = !sc.win; sc.t = 0; scRender(); toast(`불난 방 창 → ${sc.win ? "열림" : "닫힘"}`);
+  } else if (ev.kind === "fire") openFirePop(ev, "sc");
 }
 
 function scRender() {
   const p = PLANS[sc.plan], c = scCase();
   const isDoor = p.door_rooms.includes(sc.room);
   const isCook = sc.room === p.cooktop[0] && sc.spot === p.cooktop[1];
-  seg($("sc-plan"), [{ value: "lh", label: "신축 (LH트릴로채 84㎡형)" }, { value: "bs", label: "구축 (백송마을5단지형)" }], sc.plan, v => { sc.plan = v; sc.t = 0; scRender(); });
-  seg($("sc-room"), Object.keys(p.fire).map(r => ({ value: r, label: p.room_ko[r] })), sc.room, v => { sc.room = v; sc.spot = 0; sc.t = 0; scRender(); });
+  const has = patch => !!CASE_BY_ID[caseIdOf(sc.plan, sc.room, patch.spot ?? sc.spot, patch.door ?? sc.door, patch.win ?? sc.win, patch.growth ?? sc.growth, patch.q ?? sc.q)];
+  seg($("sc-plan"), Object.keys(PLANS).map(k => ({ value: k, label: PLANS[k].label || planShort(k) })), sc.plan, v => { sc.plan = v; sc.t = 0; scRender(); });
+  seg($("sc-room"), roomsWithCases(sc.plan).map(r => ({ value: r, label: p.room_ko[r] })), sc.room, v => { sc.room = v; sc.spot = 0; sc.t = 0; scRender(); });
   const spots = p.fire[sc.room];
-  seg($("sc-spot"), spots.map((_, i) => ({ value: i, label: spots.length > 1 ? `화원 ${i + 1}` : "1곳" })), sc.spot, v => { sc.spot = +v; sc.t = 0; scRender(); });
+  seg($("sc-spot"), spots.map((_, i) => ({ value: i, label: spots.length > 1 ? `화원 ${i + 1}` : "1곳", disabled: !has({ spot: i }) })), sc.spot, v => { sc.spot = +v; sc.t = 0; scRender(); });
   $("sc-spot-note").textContent = isCook ? "조리대(가스레인지) 위치 → 조리 화재 곡선(기름 불 100 kW 유지 후 확대)" : spots.length > 1 ? "넓은 공간은 마주 보는 두 벽(TV·소파) 가운데" : "";
-  seg($("sc-door"), [{ value: 1, label: "열림", disabled: !isDoor }, { value: 0, label: "닫힘", disabled: !isDoor }], sc.door ? 1 : 0, v => { sc.door = !!+v; sc.t = 0; scRender(); });
+  seg($("sc-door"), [{ value: 1, label: "열림", disabled: !isDoor || !has({ door: true }) }, { value: 0, label: "닫힘", disabled: !isDoor || !has({ door: false }) }], sc.door ? 1 : 0, v => { sc.door = !!+v; sc.t = 0; scRender(); });
   $("sc-door-note").textContent = isDoor ? "" : "거실·주방은 문이 없는 열린 공간";
-  seg($("sc-win"), [{ value: 0, label: "닫힘" }, { value: 1, label: "열림" }], sc.win ? 1 : 0, v => { sc.win = !!+v; sc.t = 0; scRender(); });
-  seg($("sc-growth"), [{ value: "medium", label: "보통" }, { value: "fast", label: "빠름" }, { value: "ultrafast", label: "매우 빠름" }], sc.growth, v => { sc.growth = v; sc.t = 0; scRender(); });
+  seg($("sc-win"), [{ value: 0, label: "닫힘", disabled: !has({ win: false }) }, { value: 1, label: "열림", disabled: !has({ win: true }) }], sc.win ? 1 : 0, v => { sc.win = !!+v; sc.t = 0; scRender(); });
+  seg($("sc-growth"), ["medium", "fast", "ultrafast"].map(g => ({ value: g, label: GROWTH_KO[g], disabled: !has({ growth: g }) })), sc.growth, v => { sc.growth = v; sc.t = 0; scRender(); });
   $("sc-growth-note").textContent = "t² 화재 성장 곡선: 보통 = 소파류, 빠름 = 매트리스·커튼, 매우 빠름 = 포장재·가연성 액체 수준";
-  seg($("sc-q"), [{ value: 2, label: "2 MW" }, { value: 4, label: "4 MW" }], sc.q, v => { sc.q = +v; sc.t = 0; scRender(); });
-  $("sc-caseid").textContent = `케이스 ${c.id}` + (c.split === "test" ? " · AI 학습에 쓰지 않은 평가용" : "");
+  seg($("sc-q"), [2, 4].map(q => ({ value: q, label: `${q} MW`, disabled: !has({ q }) })), sc.q, v => { sc.q = +v; sc.t = 0; scRender(); });
+  $("sc-caseid").textContent = `케이스 ${c.id}` + (c.split === "test" ? " · AI 학습에 쓰지 않은 평가용" : c.split === "new" ? " · 학습에 전혀 안 쓴 평면(평가용)" : "");
   $("sc-title").textContent = `${p.title} — ${p.room_ko[sc.room]} 화재`;
 
   if (sc.viewPlan !== sc.plan) {
     const prevMode = sc.view ? sc.view.mode : "3d";
     if (sc.view) sc.view.dispose();
+    closePop();
     sc.view = makeView($("sc-svg"), $("sc-3d"), $("sc-2d"), p); sc.view.setMode(prevMode); sc.viewPlan = sc.plan;
-    viewModeSeg($("sc-viewmode"), sc.view);
+    sc.view.setPick(scPick);
+    viewModeSeg($("sc-viewmode"), sc.view, closePop);
   }
   const v = sc.view;
   v.setFire(sc.room, sc.spot);
@@ -193,10 +300,11 @@ function scRender() {
     ? `${sc.plan}_${sc.room}_s${sc.spot}_d${sc.door ? 0 : 1}_w${sc.win ? 1 : 0}_${sc.growth}_${sc.q}MW`
     : `${sc.plan}_${sc.room}_s${sc.spot}_d1_w${sc.win ? 0 : 1}_${sc.growth}_${sc.q}MW`;
   const o = CASE_BY_ID[otherId];
+  $("sc-compare-card").querySelector("h2").textContent = isDoor ? "불난 방의 문을 닫으면?" : "창을 열면?";
+  if (!o) { $("sc-compare").innerHTML = `<div class="note">비교할 사례(${isDoor ? "문" : "창"} 반대 조건)가 계산되지 않았습니다.</div>`; return; }
   const a = isDoor ? (sc.door ? "문 열림 (현재)" : "문 닫힘 (현재)") : (sc.win ? "창 열림 (현재)" : "창 닫힘 (현재)");
   const b = isDoor ? (sc.door ? "문 닫힘" : "문 열림") : (sc.win ? "창 닫힘" : "창 열림");
   const cmpRows = Object.keys(p.rooms).map(r => `<tr><td>${p.room_ko[r]}${r === sc.room ? " 🔥" : ""}</td><td class="num">${fmt(c.rooms[r].t_untenable)}</td><td class="num">${fmt(o.rooms[r].t_untenable)}</td></tr>`).join("");
-  $("sc-compare-card").querySelector("h2").textContent = isDoor ? "불난 방의 문을 닫으면?" : "창을 열면?";
   $("sc-compare").innerHTML = `<table><tr><th>피난 불가 시각</th><th class="num">${a}</th><th class="num">${b}</th></tr>${cmpRows}<tr><td>플래시오버</td><td class="num">${fmt(c.t_flashover)}</td><td class="num">${fmt(o.t_flashover)}</td></tr></table>
     <div class="note" style="margin-top:6px">${isDoor ? "침실 화재 228건 전체: 문을 닫으면 다른 방 피난 불가 0%, 열면 100%(중앙값 1분 20초)." : "창이 닫힌 집은 플래시오버 뒤 산소가 바닥나 불이 약해집니다(창 닫힘 75%). 다만 그 방문을 갑자기 열면 역화 위험이 있습니다."}</div>`;
 }
@@ -237,13 +345,36 @@ function scSetup() {
 }
 
 // ───────────────────────── ② 실시간 AI ─────────────────────────
-const lv = { c: null, t: 0, playing: false, speed: 5, reveal: false, preds: [], log: [], flags: {}, view: null, viewPlan: null, raf: null, last: 0 };
+const lv = { c: null, t: 0, playing: false, speed: 5, reveal: false, preds: [], log: [], flags: {}, logT: -1, thoughts: [], view: null, viewPlan: null, raf: null, last: 0 };
 
 // 정답을 가린 상태에서는 화원 방·성장 속도 같은 조건을 목록에서도 숨긴다 (AI가 모르는 정보)
 function lvCaseLabel(c, i) {
   const p = PLANS[c.plan];
-  if (!lv.reveal) return `사례 ${i + 1} · ${PLAN_SHORT[c.plan]} (조건 가림)`;
-  return `사례 ${i + 1} · ${PLAN_SHORT[c.plan]} · ${p.room_ko[c.fire_room]} 화재${c.cooktop ? "(조리)" : ""} · 문 ${p.door_rooms.includes(c.fire_room) ? (c.door_open ? "열림" : "닫힘") : "없음"} · 창 ${c.window_open ? "열림" : "닫힘"} · 성장 ${GROWTH_KO[c.growth]} · 최대 ${c.q_mw} MW`;
+  const head = i == null ? "직접 고른 조건" : `사례 ${i + 1}`;
+  if (!lv.reveal) return `${head} · ${planShort(c.plan)} (조건 가림)`;
+  return `${head} · ${planShort(c.plan)} · ${p.room_ko[c.fire_room]} 화재${c.cooktop ? "(조리)" : ""} · 문 ${p.door_rooms.includes(c.fire_room) ? (c.door_open ? "열림" : "닫힘") : "없음"} · 창 ${c.window_open ? "열림" : "닫힘"} · 성장 ${GROWTH_KO[c.growth]} · 최대 ${c.q_mw} MW`;
+}
+
+// 실시간 탭에서 3D·평면도를 클릭했을 때: 조건을 바꿔 그 사례를 불러온다 (학습에 쓴 사례면 그렇다고 표시)
+function lvPick(ev) {
+  const c = lv.c, p = PLANS[c.plan];
+  const go = (patch, msg) => {
+    const n = { room: c.fire_room, spot: c.spot, door: c.door_open, win: c.window_open, growth: c.growth, q: c.q_mw, ...patch };
+    const id = caseIdOf(c.plan, n.room, n.spot, n.door, n.win, n.growth, n.q);
+    if (!CASE_BY_ID[id]) { toast("이 조합은 계산된 사례가 없습니다"); return; }
+    lv.reveal = true; lvLoad(id); toast(msg);
+  };
+  if (ev.kind === "room") {
+    if (!roomsWithCases(c.plan).includes(ev.room)) { toast(`${p.room_ko[ev.room]}: 화원 조건을 계산하지 않은 공간입니다`); return; }
+    if (ev.room === c.fire_room) { openFirePop(ev, "lv"); return; }
+    go({ room: ev.room, spot: 0 }, `불난 방 → ${p.room_ko[ev.room]} (청중에게 가리려면 '가림'을 누르고 재생)`);
+  } else if (ev.kind === "door") {
+    if (ev.room !== c.fire_room) { toast(`${p.room_ko[ev.room]} 문: 불난 방의 문만 조건입니다`); return; }
+    go({ door: !c.door_open }, `불난 방 문 → ${c.door_open ? "닫힘" : "열림"}`);
+  } else if (ev.kind === "window") {
+    if (ev.room !== c.fire_room) { toast(`${p.room_ko[ev.room]} 창: 불난 방의 창만 조건입니다`); return; }
+    go({ win: !c.window_open }, `불난 방 창 → ${c.window_open ? "닫힘" : "열림"}`);
+  } else if (ev.kind === "fire") openFirePop(ev, "lv");
 }
 
 function lvTcBySlot() {
@@ -253,16 +384,68 @@ function lvTcBySlot() {
 
 function lvEnsurePreds(upto) {
   const tc = lvTcBySlot();
-  for (let k = lv.preds.length; k <= upto; k++) {
-    lv.preds[k] = k < 10 ? null : model.predictAt(tc, k);
-    lvLogEvents(k);
+  for (let k = lv.preds.length; k <= upto; k++) lv.preds[k] = k < 10 ? null : model.predictAt(tc, k);
+}
+// 경고 기록은 '지금까지 재생한 시각'까지만 (비교표를 위해 끝까지 미리 계산해도 미래 경고가 새지 않게)
+function lvLogUpTo(t) {
+  for (let k = (lv.logT ?? -1) + 1; k <= t; k++) { lvThinkStep(k); lvLogEvents(k); }
+  lv.logT = Math.max(lv.logT ?? -1, t);
+}
+
+// ── 'AI가 지금 하는 일': 매초 입력(센서)·내부(은닉 상태)·출력(세 예측)을 말로 적는다. 꾸민 문장이 아니라 그 시각의 실제 값으로 만든다
+const fmtD = d => `${d >= 0 ? "+" : "−"}${Math.abs(d).toFixed(0)}°C`;
+function hiddenDelta(a, b) { if (!a || !b) return null; let s = 0; for (let i = 0; i < a.length; i++) s += (a[i] - b[i]) ** 2; return Math.sqrt(s / a.length); }
+function lvThinkStep(k) {
+  const c = lv.c, p = PLANS[c.plan], pr = lv.preds[k];
+  const say = (text, kind = "") => lv.thoughts.push({ t: k, text, kind });
+  if (k === 0) { say(`센서 ${p.slots.filter(Boolean).length}개 연결. 화재 전 구간은 평상시 20°C로 채워 60초 창을 만듦`, "sys"); return; }
+  if (k < 10) return;
+  if (k === 10) say("첫 추론 — 이제부터 매초 최근 60초 창을 GRU에 넣어 남은 시간·플래시오버·화원 방을 동시에 계산", "sys");
+  if (!pr) return;
+  const T = (r, kk) => c.tc[r][Math.max(0, Math.min(kk, c.tc[r].length - 1))] / 10;
+  const temps = p.slots.filter(Boolean).map(r => ({ r, T: T(r, k), d: T(r, k) - T(r, k - 10) }));
+  const hot = temps.reduce((a, b) => b.T > a.T ? b : a), fast = temps.reduce((a, b) => b.d > a.d ? b : a);
+  const quiet = hot.T < 30 && fast.d < 1.5;
+  const prev = lv.preds[k - 10];
+  const j = pr.room.indexOf(Math.max(...pr.room)), top = p.slots[j], pTop = pr.room[j];
+  if (k % 5 === 0) {
+    if (quiet) { if (k % 20 === 0) say(`모든 방 천장 온도 평상시(최고 ${hot.T.toFixed(0)}°C). 이상 신호 없음 — 계속 관찰`, "obs"); }
+    else say(`${p.room_ko[hot.r]} 천장 ${hot.T.toFixed(0)}°C (${fmtD(hot.d)}/10초)` + (hot.r !== fast.r && fast.d >= 1.5 ? ` · ${p.room_ko[fast.r]}이(가) ${fmtD(fast.d)}/10초로 가장 빨리 오름` : hot.d >= 1.5 ? " — 가장 뜨겁고 가장 빨리 오름" : " — 상승 멈춤"), "obs");
   }
+  if (k % 10 === 0 && !quiet) {
+    const pp = prev ? prev.room[j] : null;
+    const conf = pTop >= 0.9 ? "확신" : pTop >= 0.6 ? "유력" : "아직 불확실 — 방 간 온도 차가 작음";
+    say(`화원 방 추정: ${p.room_ko[top]} ${(pTop * 100).toFixed(0)}%${pp != null ? ` (10초 전 ${(pp * 100).toFixed(0)}%)` : ""} — ${conf}`, "inf");
+    const urg = p.slots.map((r, i) => r ? { r, ten: pr.ten[i], prevTen: prev ? prev.ten[i] : null } : null).filter(x => x && x.ten < 300).sort((a, b) => a.ten - b.ten)[0];
+    if (urg) {
+      const trend = urg.prevTen == null ? "" : urg.ten < urg.prevTen - 5 ? " · 줄어드는 중" : urg.ten > urg.prevTen + 5 ? " · 늘어남(온도 상승 둔화)" : " · 비슷";
+      say(urg.ten < 5 ? `${p.room_ko[urg.r]}: 피난 불가로 판단 유지` : `${p.room_ko[urg.r]} 피난 불가까지 ${Math.round(urg.ten)}초${trend}` + (urg.ten > 60 && urg.ten <= 150 ? ` → 60초 경고까지 약 ${Math.round(urg.ten - 60)}초` : ""), "inf");
+    } else say("모든 방 피난 가능 시간 5분 이상 — 당장 위험한 방 없음", "inf");
+    if (pr.fo < 300) say(`플래시오버 ${pr.fo < 5 ? "임박" : `약 ${Math.round(pr.fo)}초 후`} 예상 (화원 방 상층 600°C)`, pr.fo < 60 ? "warn" : "inf");
+  }
+  if (k % 20 === 0 && !quiet) {
+    const d = hiddenDelta(pr.h, lv.preds[k - 1] && lv.preds[k - 1].h);
+    say(`GRU 은닉 상태 64차원 갱신 — 초당 변화 ${d == null ? "—" : d.toFixed(3)} (값이 클수록 새 정보가 많음)`, "sys");
+  }
+  if (k === Math.floor(c.t_end)) say("재생 끝 — FDS 정답과 비교표 작성", "done");
+}
+function lvThinkRender() {
+  const body = $("lv-think-body"), st = $("lv-think-state"), dot = $("lv-think-dot");
+  const t = Math.floor(lv.t), c = lv.c;
+  const warn = Object.keys(lv.flags).some(f => f !== "room");
+  const state = lv.t >= c.t_end ? "비교 중" : warn ? "경고 중" : t < 10 ? (lv.playing ? "수집 중" : "대기") : (lv.thoughts.some(x => x.kind === "inf") ? "추론 중" : "관찰 중");
+  st.textContent = state; st.classList.toggle("warn", state === "경고 중");
+  dot.classList.toggle("on", lv.playing);
+  const items = lv.thoughts.slice(-18);
+  body.innerHTML = (items.length ? "" : `<div class="th idle">▶ 재생을 누르면 AI가 매초 무엇을 보고 어떻게 판단하는지 여기에 적힙니다.</div>`) +
+    items.map(x => `<div class="th ${x.kind}"><span class="tt">${fmt(x.t)}</span><span>${x.text}</span></div>`).join("");
+  body.scrollTop = 1e6;
 }
 
 function lvLogEvents(k) {
   const pr = lv.preds[k]; if (!pr) return;
   const p = PLANS[lv.c.plan];
-  const add = (key, text, warn) => { if (lv.flags[key]) return; lv.flags[key] = k; lv.log.push({ t: k, text, warn }); };
+  const add = (key, text, warn) => { if (lv.flags[key]) return; lv.flags[key] = k; lv.log.push({ t: k, text, warn }); if (warn) lv.thoughts.push({ t: k, text: `⚠ 경고 발령 — ${text}`, kind: "warn" }); };
   const top = pr.room.indexOf(Math.max(...pr.room));
   if (pr.room[top] >= 0.9 && p.slots[top]) add("room", `화원 방 추정: ${p.room_ko[p.slots[top]]} (확률 ${Math.round(pr.room[top] * 100)}%)`, false);
   p.slots.forEach((r, j) => {
@@ -276,14 +459,17 @@ function lvLogEvents(k) {
 
 function lvRender() {
   const c = lv.c, p = PLANS[c.plan], t = Math.floor(lv.t);
-  lvEnsurePreds(t);
+  lvEnsurePreds(t); lvLogUpTo(t);
   const pr = lv.preds[t];
   if (lv.viewPlan !== c.plan) {
     const prevMode = lv.view ? lv.view.mode : "3d";
     if (lv.view) lv.view.dispose();
+    closePop();
     lv.view = makeView($("lv-svg"), $("lv-3d"), $("lv-2d"), p); lv.view.setMode(prevMode); lv.viewPlan = c.plan;
-    viewModeSeg($("lv-viewmode"), lv.view);
+    lv.view.setPick(lvPick);
+    viewModeSeg($("lv-viewmode"), lv.view, closePop);
   }
+  $("lv-casenote").textContent = c.split === "test" ? "학습에 쓰지 않은 평가용 사례" : c.split === "new" ? "학습에 전혀 안 쓴 평면 — 평면 단위 평가" : "⚠ 학습에 쓴 사례 — 참고용(평가 아님). 3D·평면도를 클릭해 조건을 바꾸면 이렇게 됩니다";
   const v = lv.view;
   v.setFire(lv.reveal ? c.fire_room : null, c.spot);
   for (const r of p.door_rooms) v.setDoor(r, lv.reveal ? (r === c.fire_room ? c.door_open : true) : true);
@@ -321,6 +507,7 @@ function lvRender() {
   $("lv-log").scrollTop = 1e6;
 
   lvChart(t);
+  lvThinkRender();
   if (lv.reveal || lv.t >= c.t_end) lvResult(); else $("lv-result").innerHTML = `<div class="note">재생이 끝나거나 '정답 표시'를 켜면 비교표가 나옵니다.</div>`;
 }
 
@@ -380,8 +567,10 @@ function lvResult() {
 }
 
 function lvLoad(id) {
-  lv.c = CASE_BY_ID[id]; lv.t = 0; lv.preds = []; lv.log = []; lv.flags = {}; lv.playing = false;
+  lv.c = CASE_BY_ID[id]; lv.t = 0; lv.preds = []; lv.log = []; lv.flags = {}; lv.logT = -1; lv.thoughts = []; lv.playing = false;
   $("lv-play").textContent = "▶ 재생";
+  if (lv.refreshReveal) lv.refreshReveal();   // 목록 글자·'표시' 버튼을 현재 상태에 맞춤 (목록에 없는 사례면 '직접 고른 조건' 항목 추가)
+  $("lv-case").value = id;
   lvRender();
 }
 
@@ -395,24 +584,36 @@ function lvLoop(ts) {
 }
 
 function lvSetup() {
-  const tests = CASES.filter(c => c.split === "test").sort((a, b) => a.id.localeCompare(b.id));
+  // 목록: 학습에 쓰지 않은 사례(평가용) + 학습에 전혀 안 쓴 평면의 사례. 클릭으로 고른 다른 사례는 '직접 고른 조건'으로 끝에 붙음
+  const tests = CASES.filter(c => c.split === "test" || c.split === "new").sort((a, b) => a.id.localeCompare(b.id));
   const sel = $("lv-case");
-  const fillCases = () => { const cur = sel.value; sel.innerHTML = tests.map((c, i) => `<option value="${c.id}">${lvCaseLabel(c, i)}</option>`).join(""); if (cur) sel.value = cur; };
+  const fillCases = () => {
+    const cur = lv.c ? lv.c.id : sel.value;
+    sel.innerHTML = tests.map((c, i) => `<option value="${c.id}">${lvCaseLabel(c, i)}</option>`).join("");
+    if (cur && !tests.some(c => c.id === cur)) sel.insertAdjacentHTML("beforeend", `<option value="${cur}">${lvCaseLabel(CASE_BY_ID[cur], null)}</option>`);
+    if (cur) sel.value = cur;
+  };
   fillCases();
   const preferred = tests.find(c => c.id === "bs_bigbr_s0_d1_w0_fast_2MW") || tests[0];
   sel.value = preferred.id;
   sel.onchange = () => lvLoad(sel.value);
   const speedRefresh = () => seg($("lv-speed"), [1, 5, 20].map(x => ({ value: x, label: `${x}배속` })), lv.speed, v => { lv.speed = +v; speedRefresh(); });
   speedRefresh();
-  const revealRefresh = () => seg($("lv-reveal"), [{ value: 0, label: "가림" }, { value: 1, label: "표시" }], lv.reveal ? 1 : 0, v => { lv.reveal = !!+v; revealRefresh(); fillCases(); lvRender(); });
+  const revealRefresh = () => { seg($("lv-reveal"), [{ value: 0, label: "가림" }, { value: 1, label: "표시" }], lv.reveal ? 1 : 0, v => { lv.reveal = !!+v; revealRefresh(); lvRender(); }); fillCases(); };
+  lv.refreshReveal = revealRefresh;
   revealRefresh();
   $("lv-play").onclick = () => {
     if (lv.playing) { lv.playing = false; $("lv-play").textContent = "▶ 재생"; return; }
-    if (lv.t >= lv.c.t_end) { lv.t = 0; lv.log = []; lv.flags = {}; lv.preds = []; }
+    if (lv.t >= lv.c.t_end) { lv.t = 0; lv.log = []; lv.flags = {}; lv.preds = []; lv.logT = -1; lv.thoughts = []; }
     lv.playing = true; lv.last = performance.now(); $("lv-play").textContent = "⏸ 멈춤";
     lv.raf = requestAnimationFrame(lvLoop);
   };
   $("lv-reset").onclick = () => lvLoad(sel.value);
+  $("lv-random").onclick = () => {   // 평가용(학습 제외) 사례 중 무작위, 조건은 가린 채
+    const pool = tests.filter(c => !lv.c || c.id !== lv.c.id);
+    const c = pool[Math.floor(Math.random() * pool.length)];
+    lv.reveal = false; lvLoad(c.id); toast("무작위 사례를 골랐습니다 — 조건은 가려져 있어요. ▶ 재생");
+  };
   $("lv-time").oninput = e => { lv.t = +e.target.value; lvRender(); };
   window.addEventListener("resize", () => { if (lv.c) lvChart(Math.floor(lv.t)); });
   lvLoad(preferred.id);

@@ -166,8 +166,22 @@ class PlanView3D {
     scene.add(sun);
 
     this.X = x => x - this.cx; this.Z = y => -(y - this.cy);   // FDS(x, y북) → three(x, -z)
-    this.rooms = {}; this.doors = {}; this.wins = {};
+    this.rooms = {}; this.doors = {}; this.wins = {}; this.pickables = [];
     this.build();
+    // 클릭(드래그가 아닌 짧은 누름)으로 방·문·창·화원 고르기 → onPick({kind, room, x, y}); 올리면 강조
+    this.onPick = null; this.hover = null;
+    this.ray = new THREE.Raycaster(); this.ptr = new THREE.Vector2();
+    const dom = renderer.domElement; let down = null;
+    dom.addEventListener("pointerdown", e => { down = { x: e.clientX, y: e.clientY, t: performance.now() }; });
+    dom.addEventListener("pointerup", e => {
+      if (!down) return;
+      const moved = Math.hypot(e.clientX - down.x, e.clientY - down.y), dt = performance.now() - down.t; down = null;
+      if (moved > 6 || dt > 600) return;
+      const hit = this.pickAt(e);
+      if (hit && this.onPick) this.onPick({ ...hit.userData.pick, x: e.clientX, y: e.clientY });
+    });
+    dom.addEventListener("pointermove", e => { if (e.buttons || e.pointerType === "touch") return; this.setHover(this.pickAt(e)); });
+    dom.addEventListener("pointerleave", () => this.setHover(null));
     this.clock = new THREE.Clock();
     this.running = true;
     this.resize();
@@ -219,8 +233,8 @@ class PlanView3D {
       const alongX = (x2 - x1) >= (y2 - y1);
       const len = alongX ? x2 - x1 : y2 - y1;
       const g = new THREE.Group();
-      const panel = new THREE.Mesh(new THREE.BoxGeometry(alongX ? len : 0.05, WALL_H, alongX ? 0.05 : len), matDoor);
-      panel.castShadow = true;
+      const panel = new THREE.Mesh(new THREE.BoxGeometry(alongX ? len : 0.05, WALL_H, alongX ? 0.05 : len), matDoor.clone());
+      panel.castShadow = true; panel.userData.pick = { kind: "door", room: r }; this.pickables.push(panel);
       panel.position.set(alongX ? len / 2 : 0, WALL_H / 2, alongX ? 0 : -len / 2);
       g.add(panel);
       g.position.set(this.X(alongX ? x1 : (x1 + x2) / 2), 0, this.Z(alongX ? (y1 + y2) / 2 : y2));
@@ -233,7 +247,8 @@ class PlanView3D {
       const alongX = Math.abs(x2 - x1) > Math.abs(y2 - y1);
       const m = alongX ? this.box(x1, x2, y1 - 0.05, y2 + 0.05, 0.3, WALL_H + 0.3, matGlass, false)
                        : this.box(x1 - 0.05, x2 + 0.05, y1, y2, 0.3, WALL_H + 0.3, matGlass, false);
-      m.userData.mats = [matGlass, matGlassOpen];
+      m.userData.mats = [matGlass.clone(), matGlassOpen.clone()]; m.material = m.userData.mats[0];
+      m.userData.pick = { kind: "window", room: r }; this.pickables.push(m);
       this.wins[r] = m;
     }
     // 방: 바닥 색 + 연기층(잡음 무늬 판을 천장부터 여러 장 쌓아 두께·농도 표현, 천천히 흐름) + 라벨
@@ -242,6 +257,7 @@ class PlanView3D {
       const [x1, x2, y1, y2] = p.rooms[r];
       const tint = this.box(x1 + 0.05, x2 - 0.05, y1 + 0.05, y2 - 0.05, 0.005, 0.02,
         new THREE.MeshBasicMaterial({ color: 0x2dd4bf, transparent: true, opacity: 0.22 }), false);
+      tint.userData.pick = { kind: "room", room: r }; this.pickables.push(tint);
       const layers = [];
       for (let i = 0; i < N_LAYER; i++) {
         const tex = stex.clone(); tex.needsUpdate = true;
@@ -259,12 +275,14 @@ class PlanView3D {
       const label = textSprite([p.room_ko[r], "안전"], { color: "#2dd4bf" });
       label.position.set(this.X(cx), WALL_H + 0.75, this.Z(cy));
       scene.add(label);
-      this.rooms[r] = { tint, layers, label, size: [x2 - x1 - 0.1, y2 - y1 - 0.1] };
+      this.rooms[r] = { tint, layers, label, level: 0, hover: false, size: [x2 - x1 - 0.1, y2 - y1 - 0.1] };
     }
     // 화원
     const fire = this.fire = new THREE.Group(); fire.visible = false;
     const core = new THREE.Mesh(new THREE.BoxGeometry(0.6, 0.4, 0.6), new THREE.MeshStandardMaterial({ color: 0x3a2a22, emissive: 0xff4a10, emissiveIntensity: 0.8, roughness: 0.6 }));
     core.position.y = 0.2; core.castShadow = true; fire.add(core);
+    const hit = new THREE.Mesh(new THREE.SphereGeometry(0.7, 12, 10), new THREE.MeshBasicMaterial({ visible: false }));   // 클릭 영역
+    hit.position.y = 0.5; hit.userData.pick = { kind: "fire" }; fire.add(hit); this.pickables.push(hit);
     const ftex = flameTexture();
     this.flames = [];
     for (let i = 0; i < 4; i++) {
@@ -306,9 +324,28 @@ class PlanView3D {
     u.rot = Math.random() * Math.PI * 2; u.spin = (Math.random() - .5) * 0.9;
   }
   // level: 0 안전 … 1 피난 불가 (연기층 두께·농도, 바닥 색). 연기층은 그 방 천장 온도로 정한 '상태 표현'
+  pickAt(e) {
+    const rc = this.renderer.domElement.getBoundingClientRect();
+    this.ptr.set(((e.clientX - rc.left) / rc.width) * 2 - 1, -((e.clientY - rc.top) / rc.height) * 2 + 1);
+    this.ray.setFromCamera(this.ptr, this.camera);
+    const hits = this.ray.intersectObjects(this.pickables.filter(o => o.visible && o.parent.visible), false);
+    return hits.length ? hits[0].object : null;
+  }
+  setHover(obj) {
+    if (obj === this.hover) return;
+    if (this.hover) this.highlight(this.hover, false);
+    this.hover = obj; this.renderer.domElement.style.cursor = obj ? "pointer" : "";
+    if (obj) this.highlight(obj, true);
+  }
+  highlight(obj, on) {
+    const pk = obj.userData.pick;
+    if (pk.kind === "room") { const o = this.rooms[pk.room]; o.hover = on; o.tint.material.opacity = 0.18 + 0.3 * o.level + (on ? 0.25 : 0); }
+    else if (obj.material && obj.material.emissive) obj.material.emissive.set(on ? 0x7a4a1a : 0x000000);
+  }
   setRoom(r, color, text, level = 0) {
     const o = this.rooms[r]; if (!o) return;
-    o.tint.material.color.set(color); o.tint.material.opacity = 0.18 + 0.3 * level;
+    o.level = level;
+    o.tint.material.color.set(color); o.tint.material.opacity = 0.18 + 0.3 * level + (o.hover ? 0.25 : 0);
     o.label.userData.update(this.plan.room_ko[r], text, color);
     const lv = Math.min(1, level), show = level >= 0.02;
     const depth = 0.12 + 1.9 * lv;

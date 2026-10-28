@@ -239,9 +239,11 @@ function scSetup() {
 // ───────────────────────── ② 실시간 AI ─────────────────────────
 const lv = { c: null, t: 0, playing: false, speed: 5, reveal: false, preds: [], log: [], flags: {}, view: null, viewPlan: null, raf: null, last: 0 };
 
-function lvCaseLabel(c) {
+// 정답을 가린 상태에서는 화원 방·성장 속도 같은 조건을 목록에서도 숨긴다 (AI가 모르는 정보)
+function lvCaseLabel(c, i) {
   const p = PLANS[c.plan];
-  return `${PLAN_SHORT[c.plan]} · ${p.room_ko[c.fire_room]} 화재${c.cooktop ? "(조리)" : ""} · 문 ${p.door_rooms.includes(c.fire_room) ? (c.door_open ? "열림" : "닫힘") : "없음"} · 창 ${c.window_open ? "열림" : "닫힘"} · ${GROWTH_KO[c.growth]} · ${c.q_mw} MW`;
+  if (!lv.reveal) return `사례 ${i + 1} · ${PLAN_SHORT[c.plan]} (조건 가림)`;
+  return `사례 ${i + 1} · ${PLAN_SHORT[c.plan]} · ${p.room_ko[c.fire_room]} 화재${c.cooktop ? "(조리)" : ""} · 문 ${p.door_rooms.includes(c.fire_room) ? (c.door_open ? "열림" : "닫힘") : "없음"} · 창 ${c.window_open ? "열림" : "닫힘"} · 성장 ${GROWTH_KO[c.growth]} · 최대 ${c.q_mw} MW`;
 }
 
 function lvTcBySlot() {
@@ -395,13 +397,14 @@ function lvLoop(ts) {
 function lvSetup() {
   const tests = CASES.filter(c => c.split === "test").sort((a, b) => a.id.localeCompare(b.id));
   const sel = $("lv-case");
-  sel.innerHTML = tests.map(c => `<option value="${c.id}">${lvCaseLabel(c)}</option>`).join("");
+  const fillCases = () => { const cur = sel.value; sel.innerHTML = tests.map((c, i) => `<option value="${c.id}">${lvCaseLabel(c, i)}</option>`).join(""); if (cur) sel.value = cur; };
+  fillCases();
   const preferred = tests.find(c => c.id === "bs_bigbr_s0_d1_w0_fast_2MW") || tests[0];
   sel.value = preferred.id;
   sel.onchange = () => lvLoad(sel.value);
   const speedRefresh = () => seg($("lv-speed"), [1, 5, 20].map(x => ({ value: x, label: `${x}배속` })), lv.speed, v => { lv.speed = +v; speedRefresh(); });
   speedRefresh();
-  const revealRefresh = () => seg($("lv-reveal"), [{ value: 0, label: "가림" }, { value: 1, label: "표시" }], lv.reveal ? 1 : 0, v => { lv.reveal = !!+v; revealRefresh(); lvRender(); });
+  const revealRefresh = () => seg($("lv-reveal"), [{ value: 0, label: "가림" }, { value: 1, label: "표시" }], lv.reveal ? 1 : 0, v => { lv.reveal = !!+v; revealRefresh(); fillCases(); lvRender(); });
   revealRefresh();
   $("lv-play").onclick = () => {
     if (lv.playing) { lv.playing = false; $("lv-play").textContent = "▶ 재생"; return; }

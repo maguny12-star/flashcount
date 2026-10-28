@@ -93,6 +93,49 @@ function flameTexture() {
   return new THREE.CanvasTexture(c);
 }
 
+// 연기층 텍스처: 이어 붙여도 티 안 나는 값 잡음(4옥타브) → 밝기·알파. 한 번 만들어 모든 방·보기에서 공유
+let _smokeTex = null;
+function smokeTexture() {
+  if (_smokeTex) return _smokeTex;
+  const size = 256, c = document.createElement("canvas"); c.width = c.height = size;
+  const g = c.getContext("2d"), img = g.createImageData(size, size);
+  const octs = [];
+  for (let o = 0; o < 4; o++) { const n = 4 << o, grid = new Float32Array(n * n); for (let i = 0; i < grid.length; i++) grid[i] = Math.random(); octs.push({ n, grid }); }
+  const sample = (grid, n, u, v) => {
+    const x = u * n, y = v * n, x0 = Math.floor(x), y0 = Math.floor(y), fx = x - x0, fy = y - y0;
+    const sx = fx * fx * (3 - 2 * fx), sy = fy * fy * (3 - 2 * fy);
+    const at = (i, j) => grid[(j % n) * n + (i % n)];
+    return (at(x0, y0) * (1 - sx) + at(x0 + 1, y0) * sx) * (1 - sy) + (at(x0, y0 + 1) * (1 - sx) + at(x0 + 1, y0 + 1) * sx) * sy;
+  };
+  for (let y = 0; y < size; y++) for (let x = 0; x < size; x++) {
+    let v = 0, amp = 0.5, sum = 0;
+    for (const o of octs) { v += amp * sample(o.grid, o.n, x / size, y / size); sum += amp; amp *= 0.5; }
+    v /= sum;
+    const a = Math.min(1, Math.max(0, (v - 0.3) / 0.45));
+    const i = (y * size + x) * 4, shade = 44 + 70 * v;
+    img.data[i] = shade; img.data[i + 1] = shade + 2; img.data[i + 2] = shade + 8; img.data[i + 3] = Math.round(255 * (0.3 + 0.7 * a));
+  }
+  g.putImageData(img, 0, 0);
+  _smokeTex = new THREE.CanvasTexture(c);
+  _smokeTex.wrapS = _smokeTex.wrapT = THREE.RepeatWrapping; _smokeTex.encoding = THREE.sRGBEncoding;
+  return _smokeTex;
+}
+
+// 연기 뭉치(화원에서 피어오르는 입자) 텍스처: 가장자리가 부드러운 원
+let _puffTex = null;
+function puffTexture() {
+  if (_puffTex) return _puffTex;
+  const c = document.createElement("canvas"); c.width = c.height = 128;
+  const g = c.getContext("2d");
+  const grd = g.createRadialGradient(64, 64, 6, 64, 64, 62);
+  grd.addColorStop(0, "rgba(255,255,255,0.9)"); grd.addColorStop(0.45, "rgba(255,255,255,0.45)"); grd.addColorStop(1, "rgba(255,255,255,0)");
+  g.fillStyle = grd; g.fillRect(0, 0, 128, 128);
+  _puffTex = new THREE.CanvasTexture(c); _puffTex.encoding = THREE.sRGBEncoding;
+  return _puffTex;
+}
+
+const N_LAYER = 5;   // 방마다 쌓는 연기 판 수 (천장 → 연기층 아랫면)
+
 class PlanView3D {
   constructor(container, plan) {
     this.plan = plan; this.container = container;
@@ -193,20 +236,30 @@ class PlanView3D {
       m.userData.mats = [matGlass, matGlassOpen];
       this.wins[r] = m;
     }
-    // 방: 바닥 색 + 연기 슬래브 + 라벨
+    // 방: 바닥 색 + 연기층(잡음 무늬 판을 천장부터 여러 장 쌓아 두께·농도 표현, 천천히 흐름) + 라벨
+    const stex = smokeTexture();
     for (const r in p.rooms) {
       const [x1, x2, y1, y2] = p.rooms[r];
       const tint = this.box(x1 + 0.05, x2 - 0.05, y1 + 0.05, y2 - 0.05, 0.005, 0.02,
         new THREE.MeshBasicMaterial({ color: 0x2dd4bf, transparent: true, opacity: 0.22 }), false);
-      const smoke = new THREE.Mesh(new THREE.BoxGeometry(x2 - x1 - 0.1, 1, y2 - y1 - 0.1),
-        new THREE.MeshStandardMaterial({ color: 0x23252b, transparent: true, opacity: 0, roughness: 1 }));
-      smoke.position.set(this.X((x1 + x2) / 2), CEIL, this.Z((y1 + y2) / 2)); smoke.visible = false;
-      scene.add(smoke);
+      const layers = [];
+      for (let i = 0; i < N_LAYER; i++) {
+        const tex = stex.clone(); tex.needsUpdate = true;
+        tex.repeat.set((x2 - x1) / 3.2, (y2 - y1) / 3.2); tex.offset.set(Math.random(), Math.random());
+        const m = new THREE.Mesh(new THREE.PlaneGeometry(x2 - x1 - 0.1, y2 - y1 - 0.1),
+          new THREE.MeshBasicMaterial({ map: tex, transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide }));
+        m.rotation.x = -Math.PI / 2; m.rotation.z = Math.random() < 0.5 ? 0 : Math.PI;
+        m.position.set(this.X((x1 + x2) / 2), CEIL, this.Z((y1 + y2) / 2));
+        m.visible = false; m.renderOrder = 2;
+        const ang = Math.random() * Math.PI * 2, sp = 0.012 + Math.random() * 0.014;
+        m.userData.drift = [Math.cos(ang) * sp, Math.sin(ang) * sp];
+        scene.add(m); layers.push(m);
+      }
       const [cx, cy] = p.centers[r];
       const label = textSprite([p.room_ko[r], "안전"], { color: "#2dd4bf" });
       label.position.set(this.X(cx), WALL_H + 0.75, this.Z(cy));
       scene.add(label);
-      this.rooms[r] = { tint, smoke, label, size: [x2 - x1 - 0.1, y2 - y1 - 0.1] };
+      this.rooms[r] = { tint, layers, label, size: [x2 - x1 - 0.1, y2 - y1 - 0.1] };
     }
     // 화원
     const fire = this.fire = new THREE.Group(); fire.visible = false;
@@ -220,6 +273,15 @@ class PlanView3D {
       s.scale.set(0.8, 1.0, 1); fire.add(s); this.flames.push(s);
     }
     const light = this.fireLight = new THREE.PointLight(0xff7a30, 1.4, 9, 2); light.position.y = 0.8; fire.add(light);
+    // 화원에서 피어오르는 연기 뭉치: 올라가며 커지고 옅어지다 천장에 닿으면 옆으로 퍼짐 (화원 그룹의 자식이라 화원을 가리면 같이 숨음)
+    const ptex = puffTexture();
+    this.puffs = [];
+    for (let i = 0; i < 56; i++) {
+      const s = new THREE.Sprite(new THREE.SpriteMaterial({ map: ptex, transparent: true, opacity: 0, depthWrite: false, color: 0x55585f }));
+      s.visible = false; s.userData = { age: -Math.random() * 4.5, life: 0, vx: 0, vz: 0, rot: 0, spin: 0 };
+      this.puffReset(s.userData);
+      fire.add(s); this.puffs.push(s);
+    }
     scene.add(fire);
     // AI 추정 화원 표시(실시간 모드): 바닥의 고리
     const ring = this.aiRing = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.06, 10, 48), new THREE.MeshBasicMaterial({ color: 0xff6a3d }));
@@ -238,17 +300,24 @@ class PlanView3D {
     const [cx, cy] = this.plan.centers[room];
     this.aiRing.position.set(this.X(cx), 0.06, this.Z(cy)); this.aiRing.visible = true;
   }
-  // level: 0 안전 … 1 피난 불가 (연기 슬래브 두께·바닥 색)
+  puffReset(u) {
+    u.life = 3.2 + Math.random() * 1.6;
+    u.vx = (Math.random() - .5) * 0.22; u.vz = (Math.random() - .5) * 0.22;
+    u.rot = Math.random() * Math.PI * 2; u.spin = (Math.random() - .5) * 0.9;
+  }
+  // level: 0 안전 … 1 피난 불가 (연기층 두께·농도, 바닥 색). 연기층은 그 방 천장 온도로 정한 '상태 표현'
   setRoom(r, color, text, level = 0) {
     const o = this.rooms[r]; if (!o) return;
     o.tint.material.color.set(color); o.tint.material.opacity = 0.18 + 0.3 * level;
     o.label.userData.update(this.plan.room_ko[r], text, color);
-    const depth = level < 0.03 ? 0 : 0.1 + 1.9 * Math.min(1, level);
-    o.smoke.visible = depth > 0;
-    if (depth > 0) {
-      o.smoke.scale.set(1, depth, 1); o.smoke.position.y = CEIL - depth / 2;
-      o.smoke.material.opacity = 0.25 + 0.55 * Math.min(1, level);
-    }
+    const lv = Math.min(1, level), show = level >= 0.02;
+    const depth = 0.12 + 1.9 * lv;
+    o.layers.forEach((m, i) => {
+      m.visible = show; if (!show) return;
+      const f = i / (N_LAYER - 1);                       // 0 천장 … 1 연기층 아랫면
+      m.position.y = CEIL - depth * f;
+      m.material.opacity = (0.28 + 0.52 * lv) * (1 - 0.5 * f);
+    });
   }
   resize() {
     const w = this.container.clientWidth || 800, h = Math.round(w * 10 / 16);
@@ -257,11 +326,26 @@ class PlanView3D {
     this.camera.aspect = w / h; this.camera.updateProjectionMatrix();
   }
   tick() {
-    const t = this.clock.getElapsedTime();
+    const dt = Math.min(this.clock.getDelta(), 0.1), t = this.clock.elapsedTime;
     if (this.fire.visible) {
       this.flames.forEach((s, i) => { const k = t * 9 + i * 1.7; s.scale.set(0.7 + 0.25 * Math.sin(k), 0.9 + 0.35 * Math.abs(Math.sin(k * 0.7)), 1); s.position.y = 0.45 + i * 0.12 + 0.1 * Math.sin(k * 1.3); });
       this.fireLight.intensity = 1.2 + 0.5 * Math.sin(t * 17) * Math.sin(t * 7);
+      for (const s of this.puffs) {
+        const u = s.userData; u.age += dt;
+        if (u.age < 0) { s.visible = false; continue; }
+        if (u.age > u.life) { u.age = -Math.random() * 0.5; this.puffReset(u); s.visible = false; continue; }
+        const k = u.age / u.life;
+        const y = Math.min(CEIL - 0.15, 0.5 + u.age * 0.8);
+        const spread = 1 + 2.5 * Math.max(0, u.age - 2.2);     // 천장에 닿은 뒤 옆으로 퍼짐
+        s.position.set(u.vx * u.age * spread + Math.sin(u.age * 3 + u.rot) * 0.06, y, u.vz * u.age * spread + Math.cos(u.age * 2.5 + u.rot) * 0.06);
+        const sc = 0.35 + 1.15 * k; s.scale.set(sc, sc, 1);
+        s.material.opacity = 0.5 * (1 - k) * Math.min(1, u.age * 3);
+        s.material.rotation = u.rot + u.age * u.spin;
+        s.material.color.setRGB(0.5 - 0.2 * k, 0.42 - 0.14 * k, 0.36 - 0.06 * k);   // 불 근처는 갈색빛, 올라가며 회색
+        s.visible = true;
+      }
     }
+    for (const r in this.rooms) for (const m of this.rooms[r].layers) if (m.visible) { const tex = m.material.map; tex.offset.x += m.userData.drift[0] * dt; tex.offset.y += m.userData.drift[1] * dt; }
     if (this.aiRing.visible) { const s = 1 + 0.12 * Math.sin(t * 4); this.aiRing.scale.set(s, s, 1); }
     this.controls.update();
     this.renderer.render(this.scene, this.camera);

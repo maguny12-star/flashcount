@@ -739,7 +739,7 @@ function lvSetup() {
 
 // ───────────────────────── 시작 ─────────────────────────
 async function init() {
-  const [plans, cases, spec] = await Promise.all(["plans", "cases", "model"].map(n => fetch(`data/${n}.json`).then(r => r.json())));
+  const [plans, cases, spec] = await Promise.all(["plans", "cases", "model"].map(n => fetch(`data/${n}.json?v=20261029a`).then(r => r.json())));
   PLANS = plans; CASES = cases; MODEL = spec; model = new GRUModel(spec);
   for (const c of CASES) CASE_BY_ID[c.id] = c;
   document.querySelectorAll("nav button").forEach(b => b.onclick = () => {

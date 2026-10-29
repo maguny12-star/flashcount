@@ -28,7 +28,7 @@ function makePlanView(svg, plan) {
   const pick = (node, data) => { node.classList.add("pick"); node.addEventListener("click", e => { e.stopPropagation(); if (api.onPick) api.onPick({ ...data, x: e.clientX, y: e.clientY }); }); };
   const rooms = {};
   for (const r in plan.rooms) {
-    const node = rect(plan.rooms[r], { fill: "#2dd4bf", "fill-opacity": .55 }, gRooms);
+    const node = rect(plan.rooms[r], { fill: "#1e7b4f", "fill-opacity": .45 }, gRooms);
     pick(node, { kind: "room", room: r });
     const [cx, cy] = plan.centers[r];
     const label = el("text", { x: X(cx), y: Y(cy) - 6, "text-anchor": "middle", class: "room-label" }, gText);
@@ -37,7 +37,7 @@ function makePlanView(svg, plan) {
     rooms[r] = { node, status };
   }
   for (const s of plan.solids) {
-    rect(s.xb, { fill: s.wall ? "#1b1d22" : "#8a8f98" }, gSolid);
+    rect(s.xb, { fill: s.wall ? "#131416" : "#9aa0a6" }, gSolid);
     if (!s.wall && s.ko) {
       const t = el("text", { x: X((s.xb[0] + s.xb[1]) / 2), y: Y((s.xb[2] + s.xb[3]) / 2) + 4, "text-anchor": "middle", fill: "#fff", "font-size": 12 }, gSolid);
       t.textContent = s.ko;
@@ -48,7 +48,7 @@ function makePlanView(svg, plan) {
     const xb = plan.doors[r];
     const g = el("g", {}, gDoors);
     doors[r] = { node: rect(xb, { fill: "#ffffff" }, g) };
-    const t = el("text", { x: X((xb[0] + xb[1]) / 2), y: Y((xb[2] + xb[3]) / 2) + 4, "text-anchor": "middle", fill: "#b8431c", "font-size": 11 }, g);
+    const t = el("text", { x: X((xb[0] + xb[1]) / 2), y: Y((xb[2] + xb[3]) / 2) + 4, "text-anchor": "middle", fill: "#1b6c80", "font-size": 11 }, g);
     t.textContent = "문";
     doors[r].text = t;
     pick(g, { kind: "door", room: r });
@@ -58,7 +58,7 @@ function makePlanView(svg, plan) {
     const xb = plan.windows[r];
     const g = el("g", {}, gWin);
     el("line", { x1: X(xb[0]), y1: Y(xb[2]), x2: X(xb[1]), y2: Y(xb[3]), stroke: "transparent", "stroke-width": 22, "pointer-events": "stroke" }, g);   // 클릭 영역
-    wins[r] = el("line", { x1: X(xb[0]), y1: Y(xb[2]), x2: X(xb[1]), y2: Y(xb[3]), stroke: "#2f6690", "stroke-width": 7 }, g);
+    wins[r] = el("line", { x1: X(xb[0]), y1: Y(xb[2]), x2: X(xb[1]), y2: Y(xb[3]), stroke: "#2f70bb", "stroke-width": 7 }, g);
     pick(g, { kind: "window", room: r });
   }
   const fire = el("g", { visibility: "hidden" }, gFire);
@@ -81,24 +81,24 @@ function makePlanView(svg, plan) {
       const d = doors[room]; if (!d) return;
       d.node.setAttribute("fill", open ? "#ffffff" : "#6d4c41");
       d.text.textContent = open ? "문" : "닫힘";
-      d.text.setAttribute("fill", open ? "#b8431c" : "#fff");
+      d.text.setAttribute("fill", open ? "#1b6c80" : "#fff");
     },
     setWindow(room, open) {
       const w = wins[room]; if (!w) return;
-      w.setAttribute("stroke", open ? "#90caf9" : "#2f6690");
+      w.setAttribute("stroke", open ? "#a9cdf2" : "#2f70bb");
       w.setAttribute("stroke-dasharray", open ? "8 6" : "");
     },
-    setRoom(r, color, text) { rooms[r].node.setAttribute("fill", color); rooms[r].node.setAttribute("fill-opacity", color === "#2dd4bf" ? .45 : .75); rooms[r].status.textContent = text; },
+    setRoom(r, color, text) { rooms[r].node.setAttribute("fill", color); rooms[r].node.setAttribute("fill-opacity", color === "#1e7b4f" ? .4 : .7); rooms[r].status.textContent = text; },
   });
 }
 
 // 남은 시간 → [색, 글자, 심각도 0~1(연기 슬래브 두께용)]
 function statusOf(remaining, passedText = "피난 불가") {
-  if (remaining == null) return ["#2dd4bf", "피난 가능", 0];
-  if (remaining < 5) return ["#ff4d4f", passedText, 1];
-  if (remaining <= 60) return ["#ff8a3d", `${Math.round(remaining)}초 남음`, 0.45 + 0.5 * (1 - remaining / 60)];
-  if (remaining <= 180) return ["#ffd166", `${Math.round(remaining)}초 남음`, 0.12 + 0.33 * (1 - (remaining - 60) / 120)];
-  return ["#2dd4bf", `${Math.round(remaining)}초 남음`, 0.05];
+  if (remaining == null) return ["#1e7b4f", "피난 가능", 0];
+  if (remaining < 5) return ["#7f1d1d", passedText, 1];
+  if (remaining <= 60) return ["#c4242a", `${Math.round(remaining)}초 남음`, 0.45 + 0.5 * (1 - remaining / 60)];
+  if (remaining <= 180) return ["#b45309", `${Math.round(remaining)}초 남음`, 0.12 + 0.33 * (1 - (remaining - 60) / 120)];
+  return ["#1e7b4f", `${Math.round(remaining)}초 남음`, 0.05];
 }
 
 // 2D(SVG) + 3D(three.js)를 같은 명령으로 움직이는 묶음 보기
@@ -596,11 +596,17 @@ function lvRender() {
   if (lv.reveal || lv.t >= c.t_end) lvResult(); else $("lv-result").innerHTML = `<div class="note">재생이 끝나거나 '정답 표시'를 켜면 비교표가 나옵니다.</div>`;
 }
 
-const ROOM_COLORS_DARK = ["#ff6a3d", "#6fb7ff", "#2dd4bf", "#c084fc", "#ffb020", "#9aa3b2", "#f3f1ec"];
-const ROOM_COLORS_LIGHT = ["#e8552a", "#2b6fd6", "#0f9f8c", "#8e44ad", "#c77d00", "#5b6474", "#1b1f27"];
-const roomColors = () => (document.documentElement.dataset.theme === "dark" ? ROOM_COLORS_DARK : ROOM_COLORS_LIGHT);
+// 그래프 색: 색은 데이터에만 — AI가 지금 화원으로 보는 방만 강조색, 나머지는 회색 단계 (DESIGN.md)
+const ROOM_GREYS_LIGHT = ["#4b5055", "#6b7075", "#858a8f", "#9aa0a6", "#afb4b9", "#c4c8cc", "#5d5f60"];
+const ROOM_GREYS_DARK = ["#c9ccd1", "#aeb2b8", "#969aa0", "#7f8389", "#6a6e74", "#55595f", "#b4b8be"];
+const roomColors = (fireIdx = -1) => {
+  const greys = document.documentElement.dataset.theme === "dark" ? ROOM_GREYS_DARK : ROOM_GREYS_LIGHT;
+  return greys.map((g, j) => (j === fireIdx ? cssVar("--accent", "#1b6c80") : g));
+};
 function lvChart(t) {
-  const ROOM_COLORS = roomColors();
+  const prNow = lv.preds && lv.preds[Math.floor(t)];
+  const fireIdx = prNow && prNow.room ? prNow.room.indexOf(Math.max(...prNow.room)) : -1;
+  const ROOM_COLORS = roomColors(fireIdx);
   const cv = $("lv-chart"), p = PLANS[lv.c.plan];
   const dpr = window.devicePixelRatio || 1;
   const w = cv.clientWidth, h = cv.clientHeight;
@@ -613,13 +619,13 @@ function lvChart(t) {
   p.slots.forEach(r => { if (r) for (let k = 0; k <= t && k < lv.c.tc[r].length; k++) ymax = Math.max(ymax, lv.c.tc[r][k] / 10); });
   ymax = Math.ceil(ymax / 100) * 100;
   const X = x => L + (x / tmax) * (w - L - R), Y = y => T + (1 - (y - 0) / ymax) * (h - T - B);
-  g.strokeStyle = cssVar("--line", "#2a3140"); g.fillStyle = cssVar("--muted", "#9aa3b2"); g.font = "11px Pretendard, Malgun Gothic"; g.textAlign = "right";
+  g.strokeStyle = cssVar("--line", "#2a3140"); g.fillStyle = cssVar("--muted", "#9aa3b2"); g.font = "11px 'IBM Plex Sans KR', 'Malgun Gothic', sans-serif"; g.textAlign = "right";
   for (let y = 0; y <= ymax; y += ymax / 4) { g.beginPath(); g.moveTo(L, Y(y)); g.lineTo(w - R, Y(y)); g.stroke(); g.fillText(y + "°", L - 4, Y(y) + 4); }
   g.textAlign = "center";
   for (let x = 0; x <= tmax; x += 60) { g.fillText(fmt(x), X(x), h - 6); }
   p.slots.forEach((r, j) => {
     if (!r) return;
-    g.strokeStyle = ROOM_COLORS[j]; g.lineWidth = 2; g.beginPath();
+    g.strokeStyle = ROOM_COLORS[j]; g.lineWidth = j === fireIdx ? 2.2 : 1.3; g.beginPath();
     const arr = lv.c.tc[r];
     for (let k = 0; k <= t && k < arr.length; k++) { const px = X(k), py = Y(arr[k] / 10); k ? g.lineTo(px, py) : g.moveTo(px, py); }
     g.stroke();
@@ -628,7 +634,7 @@ function lvChart(t) {
   g.textAlign = "left"; let lx = L + 6;
   p.slots.forEach((r, j) => { if (!r) return; g.fillStyle = ROOM_COLORS[j]; g.fillRect(lx, T + 2, 10, 10); g.fillStyle = cssVar("--ink", "#eceae4"); g.fillText(p.room_ko[r], lx + 13, T + 11); lx += 13 + g.measureText(p.room_ko[r]).width + 10; });
   // 현재 시각 선
-  g.strokeStyle = cssVar("--ember", "#ff6a3d"); g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(X(t), T); g.lineTo(X(t), h - B); g.stroke(); g.setLineDash([]);
+  g.strokeStyle = cssVar("--ink", "#131416"); g.lineWidth = 1; g.setLineDash([4, 3]); g.beginPath(); g.moveTo(X(t), T); g.lineTo(X(t), h - B); g.stroke(); g.setLineDash([]);
 }
 
 function lvResult() {

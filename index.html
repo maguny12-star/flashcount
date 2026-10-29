@@ -4,28 +4,33 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>FlashCount — 아파트 화재 골든타임 예측 AI</title>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
-<link rel="stylesheet" href="style.css?v=20261028d">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans+KR:wght@400;500;600;700&display=swap">
+<link rel="stylesheet" href="style.css?v=20261029b">
 <script>try { document.documentElement.dataset.theme = localStorage.getItem("fc-theme") || "light"; } catch (e) { document.documentElement.dataset.theme = "light"; }</script>
 </head>
 <body>
 <header>
   <div class="top">
-    <h1>FlashCount <small>플래시카운트</small></h1>
-    <div class="sub">아파트 화재 골든타임 예측 AI — 방마다 달린 천장 온도 센서만 보고, 방별 피난 가능 시간·플래시오버·화원 위치를 실시간으로 예측합니다.</div>
-    <div class="seg" id="theme-seg" style="margin-left:auto"></div>
+    <div class="brand">
+      <svg class="mark" viewBox="0 0 30 30" aria-hidden="true"><circle cx="15" cy="16" r="10.5" fill="none" stroke="var(--accent)" stroke-width="3" stroke-dasharray="52 14" stroke-dashoffset="-6" stroke-linecap="butt" transform="rotate(-90 15 16)"/><rect x="12.5" y="1" width="5" height="4" rx="1" fill="var(--accent)"/><path d="M15 16 L15 9.5" stroke="var(--ink)" stroke-width="2.4" stroke-linecap="round"/></svg>
+      <h1>FlashCount <small>플래시카운트</small></h1>
+    </div>
+    <div class="sub">아파트 화재 골든타임 예측 AI. 방마다 달린 천장 온도 센서만 보고 방별 피난 가능 시간, 플래시오버, 화원 위치를 실시간으로 예측합니다.</div>
+    <div class="seg" id="theme-seg"></div>
   </div>
 </header>
 <nav><div class="tabs">
-  <button data-tab="scenario" class="on">① 시나리오 보기</button>
-  <button data-tab="live">② 실시간 AI 예측</button>
-  <button data-tab="method">③ 방법·성능·한계</button>
+  <button data-tab="scenario" class="on">시나리오 보기</button>
+  <button data-tab="live">실시간 AI 예측</button>
+  <button data-tab="method">방법·성능·한계</button>
 </div></nav>
 
 <main>
 <!-- ───────── ① 시나리오 ───────── -->
 <section class="tab on" id="tab-scenario">
-  <div class="banner blue">화재 조건을 고르면 FDS(미국 NIST 화재 시뮬레이터)로 계산한 276건 중 해당 건의 결과를 보여 줍니다. 시간을 움직여 방별 피난 가능 여부가 어떻게 바뀌는지 보세요. <b>AI 예측은 ② 탭</b>에서 봅니다.</div>
+  <div class="banner blue">화재 조건을 고르면 FDS(미국 NIST 화재 시뮬레이터)로 계산한 276건 중 해당 건의 결과를 보여 줍니다. 시간을 움직여 방별 피난 가능 여부가 어떻게 바뀌는지 보세요. <b>AI 예측은 '실시간 AI 예측' 탭</b>에서 봅니다.</div>
   <div class="grid">
     <div>
       <div class="card">
@@ -53,10 +58,10 @@
         </div>
         <div class="golden" id="sc-golden"></div>
         <div class="legend">
-          <span style="--c:#2dd4bf">피난 가능 (계산 시간 안에 피난 불가 안 옴)</span>
-          <span style="--c:#ffd166">피난 불가까지 3분 이내</span>
-          <span style="--c:#ff8a3d">1분 이내</span>
-          <span style="--c:#ff4d4f">피난 불가 (1.8 m 높이에서 온도 60°C↑ · 가시거리 5 m↓ · CO 1,400 ppm↑ · O₂ 15%↓ 중 하나)</span>
+          <span style="--c:#1e7b4f">피난 가능 (계산 시간 안에 피난 불가 안 옴)</span>
+          <span style="--c:#b45309">피난 불가까지 3분 이내</span>
+          <span style="--c:#c4242a">1분 이내</span>
+          <span style="--c:#7f1d1d">피난 불가 (1.8 m 높이에서 온도 60°C↑ · 가시거리 5 m↓ · CO 1,400 ppm↑ · O₂ 15%↓ 중 하나)</span>
         </div>
         <div class="timebar">
           <button class="btn secondary" id="sc-play">▶ 재생</button>
@@ -215,8 +220,8 @@
 <script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/three@0.128.0/examples/js/controls/OrbitControls.js"></script>
 <script src="gru.js?v=20261028d"></script>
-<script src="view3d.js?v=20261028d"></script>
-<script src="custom.js?v=20261028e"></script>
-<script src="app.js?v=20261029a"></script>
+<script src="view3d.js?v=20261029b"></script>
+<script src="custom.js?v=20261029b"></script>
+<script src="app.js?v=20261029b"></script>
 </body>
 </html>

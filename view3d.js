@@ -63,15 +63,18 @@ function textSprite(lines, opts = {}) {
   const c = document.createElement("canvas");
   c.width = 512; c.height = 176;
   const g = c.getContext("2d");
+  // 방 라벨: 흰(테마의 카드색) 칩, 왼쪽 띠와 상태 글자만 상태색 (DESIGN.md: 색은 데이터에만)
+  const tc = (v, f) => (typeof PlanView3D !== "undefined" ? PlanView3D.themeColor(v, f) : f);
   const draw = (title, status, color) => {
     g.clearRect(0, 0, c.width, c.height);
-    g.fillStyle = "rgba(12,14,20,0.78)";
-    const r = 28, w = c.width, h = c.height;
-    g.beginPath(); g.moveTo(r, 0); g.lineTo(w - r, 0); g.quadraticCurveTo(w, 0, w, r); g.lineTo(w, h - r); g.quadraticCurveTo(w, h, w - r, h); g.lineTo(r, h); g.quadraticCurveTo(0, h, 0, h - r); g.lineTo(0, r); g.quadraticCurveTo(0, 0, r, 0); g.fill();
-    g.fillStyle = color || "#ffb020"; g.fillRect(0, 0, 14, h);
-    g.fillStyle = "#f3f1ec"; g.font = "700 60px Pretendard, 'Malgun Gothic', sans-serif"; g.textBaseline = "middle"; g.textAlign = "left";
+    const r = 16, w = c.width, h = c.height;
+    const path = () => { g.beginPath(); g.moveTo(r, 0); g.lineTo(w - r, 0); g.quadraticCurveTo(w, 0, w, r); g.lineTo(w, h - r); g.quadraticCurveTo(w, h, w - r, h); g.lineTo(r, h); g.quadraticCurveTo(0, h, 0, h - r); g.lineTo(0, r); g.quadraticCurveTo(0, 0, r, 0); g.closePath(); };
+    g.fillStyle = tc("--card", "#ffffff"); g.globalAlpha = 0.94; path(); g.fill(); g.globalAlpha = 1;
+    g.strokeStyle = tc("--line", "#e3e6e9"); g.lineWidth = 3; path(); g.stroke();
+    g.fillStyle = color || tc("--dim", "#8b8f94"); g.fillRect(0, 0, 14, h);
+    g.fillStyle = tc("--ink", "#131416"); g.font = "600 58px 'IBM Plex Sans KR', 'Malgun Gothic', sans-serif"; g.textBaseline = "middle"; g.textAlign = "left";
     g.fillText(title, 40, 58);
-    g.fillStyle = color || "#cfd3da"; g.font = "600 44px Pretendard, 'Malgun Gothic', sans-serif";
+    g.fillStyle = color || tc("--muted", "#5d5f60"); g.font = "500 44px 'IBM Plex Sans KR', 'Malgun Gothic', sans-serif";
     g.fillText(status, 40, 124);
   };
   const tex = new THREE.CanvasTexture(c);
@@ -158,7 +161,7 @@ class PlanView3D {
     ctl.maxPolarAngle = Math.PI / 2 - 0.06; ctl.minDistance = 3; ctl.maxDistance = span * 3.5;
     ctl.enablePan = false;
 
-    scene.add(new THREE.HemisphereLight(0xffffff, 0x3a3f4a, 0.85));
+    scene.add(new THREE.HemisphereLight(0xffffff, 0xc8ccd0, 0.85));
     const sun = new THREE.DirectionalLight(0xfff2e0, 0.9);
     sun.position.set(span * 0.5, span * 1.2, span * 0.4); sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
@@ -202,10 +205,10 @@ class PlanView3D {
 
   build() {
     const p = this.plan, scene = this.scene;
-    const matFloor = new THREE.MeshStandardMaterial({ color: 0xd8cdb6, roughness: 0.95 });
-    const matWall = new THREE.MeshStandardMaterial({ color: 0xece8e0, roughness: 0.8 });
+    const matFloor = new THREE.MeshStandardMaterial({ color: 0xe9eaec, roughness: 0.95 });
+    const matWall = new THREE.MeshStandardMaterial({ color: 0xf6f7f8, roughness: 0.8 });
     const matBlock = new THREE.MeshStandardMaterial({ color: 0x7d838e, roughness: 0.9 });
-    const matGlass = new THREE.MeshStandardMaterial({ color: 0x6fb7ff, transparent: true, opacity: 0.45, roughness: 0.1, metalness: 0.2 });
+    const matGlass = new THREE.MeshStandardMaterial({ color: 0x7fb0e8, transparent: true, opacity: 0.45, roughness: 0.1, metalness: 0.2 });
     const matGlassOpen = new THREE.MeshStandardMaterial({ color: 0xbfe3ff, transparent: true, opacity: 0.15, roughness: 0.1 });
     const matDoor = new THREE.MeshStandardMaterial({ color: 0x9a6a3a, roughness: 0.7 });
     // 바닥 + 바깥 땅
@@ -258,7 +261,7 @@ class PlanView3D {
     for (const r in p.rooms) {
       const [x1, x2, y1, y2] = p.rooms[r];
       const tint = this.box(x1 + 0.05, x2 - 0.05, y1 + 0.05, y2 - 0.05, 0.005, 0.02,
-        new THREE.MeshBasicMaterial({ color: 0x2dd4bf, transparent: true, opacity: 0.22 }), false);
+        new THREE.MeshBasicMaterial({ color: 0x1e7b4f, transparent: true, opacity: 0.2 }), false);
       tint.userData.pick = { kind: "room", room: r }; this.pickables.push(tint);
       const layers = [];
       for (let i = 0; i < N_LAYER; i++) {
@@ -274,7 +277,7 @@ class PlanView3D {
         scene.add(m); layers.push(m);
       }
       const [cx, cy] = p.centers[r];
-      const label = textSprite([p.room_ko[r], "안전"], { color: "#2dd4bf" });
+      const label = textSprite([p.room_ko[r], "안전"], { color: "#1e7b4f" });
       label.position.set(this.X(cx), WALL_H + 0.75, this.Z(cy));
       scene.add(label);
       this.rooms[r] = { tint, layers, label, level: 0, hover: false, size: [x2 - x1 - 0.1, y2 - y1 - 0.1] };
@@ -304,7 +307,7 @@ class PlanView3D {
     }
     scene.add(fire);
     // AI 추정 화원 표시(실시간 모드): 바닥의 고리
-    const ring = this.aiRing = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.06, 10, 48), new THREE.MeshBasicMaterial({ color: 0xff6a3d }));
+    const ring = this.aiRing = new THREE.Mesh(new THREE.TorusGeometry(0.75, 0.06, 10, 48), new THREE.MeshBasicMaterial({ color: 0x1b6c80 }));
     ring.rotation.x = Math.PI / 2; ring.position.y = 0.06; ring.visible = false; scene.add(ring);
   }
 

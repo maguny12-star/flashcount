@@ -11,7 +11,7 @@ const CUSTOM = (() => {
   const ROLES = [["living", "거실"], ["kitchen", "주방·식당"], ["master", "안방"], ["br1", "침실1"], ["br2", "침실2"], ["corridor", "복도"], ["entry", "현관"]];
   const ROLE_KO = Object.fromEntries(ROLES);
   const SLOT_ORDER = ROLES.map(r => r[0]);
-  const ROLE_COLOR = { living: "#e3f1f4", kitchen: "#f3ead3", master: "#dbe6f3", br1: "#dfe9db", br2: "#d7e3d3", corridor: "#ececec", entry: "#e6e1da" };
+  const ROLE_COLOR = { living: "#f6c89f", kitchen: "#fbe7a1", master: "#c9d8f6", br1: "#d8e8c9", br2: "#cfe3c0", corridor: "#e6e1d8", entry: "#e0d5c3" };
   const G = 0.2, CW = 14.0, CH = 11.0, S = 50, H = 2.4;   // 격자(m), 캔버스 크기(m), px/m, 층고
   const DOOR_L = 0.8, WIN_L = 1.6, WIN_H = 1.2, DOOR_H = 2.0;
   const ed = { rooms: [], doors: [], wins: [], open: [], fire: null, tool: "room", role: "living", growth: "fast", q: 2000, doorOpen: true, winOpen: false };   // open: 벽 없이 트인 경계 ("a|b")
@@ -94,29 +94,29 @@ const CUSTOM = (() => {
     svg.innerHTML = "";
     const el = (tag, attrs, parent = svg) => { const e = document.createElementNS(ns, tag); for (const k in attrs) e.setAttribute(k, attrs[k]); parent.appendChild(e); return e; };
     const X = x => x * S, Y = y => (CH - y) * S;
-    for (let x = 0; x <= CW + 1e-6; x += 1) el("line", { x1: X(x), y1: 0, x2: X(x), y2: CH * S, stroke: "#dfe3e7", "stroke-width": x % 2 ? .5 : 1 });
-    for (let y = 0; y <= CH + 1e-6; y += 1) el("line", { x1: 0, y1: Y(y), x2: CW * S, y2: Y(y), stroke: "#dfe3e7", "stroke-width": y % 2 ? .5 : 1 });
+    for (let x = 0; x <= CW + 1e-6; x += 1) el("line", { x1: X(x), y1: 0, x2: X(x), y2: CH * S, stroke: "#c9ced8", "stroke-width": x % 2 ? .5 : 1 });
+    for (let y = 0; y <= CH + 1e-6; y += 1) el("line", { x1: 0, y1: Y(y), x2: CW * S, y2: Y(y), stroke: "#c9ced8", "stroke-width": y % 2 ? .5 : 1 });
     for (const r of ed.rooms) {
-      el("rect", { x: X(r.x1), y: Y(r.y2), width: (r.x2 - r.x1) * S, height: (r.y2 - r.y1) * S, fill: ROLE_COLOR[r.role], stroke: "#131416", "stroke-width": 3 });
-      const t = el("text", { x: X((r.x1 + r.x2) / 2), y: Y((r.y1 + r.y2) / 2) + 5, "text-anchor": "middle", "font-size": 14, "font-weight": 800, fill: "#131416" });
+      el("rect", { x: X(r.x1), y: Y(r.y2), width: (r.x2 - r.x1) * S, height: (r.y2 - r.y1) * S, fill: ROLE_COLOR[r.role], stroke: "#1b1d22", "stroke-width": 3 });
+      const t = el("text", { x: X((r.x1 + r.x2) / 2), y: Y((r.y1 + r.y2) / 2) + 5, "text-anchor": "middle", "font-size": 14, "font-weight": 800, fill: "#1b1d22" });
       t.textContent = `${ROLE_KO[r.role]} ${r2(r.x2 - r.x1)}×${r2(r.y2 - r.y1)}`;
     }
-    for (const w of walls()) el("rect", { x: X(w.x1), y: Y(w.y2), width: (w.x2 - w.x1) * S, height: (w.y2 - w.y1) * S, fill: "#131416" });
+    for (const w of walls()) el("rect", { x: X(w.x1), y: Y(w.y2), width: (w.x2 - w.x1) * S, height: (w.y2 - w.y1) * S, fill: "#1b1d22" });
     for (const o of opens()) {   // 트인 경계: 점선
       const s = o.strip, mx = (s.x1 + s.x2) / 2, my = (s.y1 + s.y2) / 2;
-      if (o.axis === "y") el("line", { x1: X(mx), y1: Y(s.y1), x2: X(mx), y2: Y(s.y2), stroke: "#9aa0a6", "stroke-width": 2, "stroke-dasharray": "6 5" });
-      else el("line", { x1: X(s.x1), y1: Y(my), x2: X(s.x2), y2: Y(my), stroke: "#9aa0a6", "stroke-width": 2, "stroke-dasharray": "6 5" });
+      if (o.axis === "y") el("line", { x1: X(mx), y1: Y(s.y1), x2: X(mx), y2: Y(s.y2), stroke: "#8a8f98", "stroke-width": 2, "stroke-dasharray": "6 5" });
+      else el("line", { x1: X(s.x1), y1: Y(my), x2: X(s.x2), y2: Y(my), stroke: "#8a8f98", "stroke-width": 2, "stroke-dasharray": "6 5" });
     }
     for (const d of ed.doors) {
-      el("rect", { x: X(d.x1), y: Y(d.y2), width: (d.x2 - d.x1) * S, height: (d.y2 - d.y1) * S, fill: "#fff", stroke: "#1b6c80", "stroke-width": 1.5 });
-      const t = el("text", { x: X((d.x1 + d.x2) / 2), y: Y((d.y1 + d.y2) / 2) + 4, "text-anchor": "middle", "font-size": 11, fill: "#1b6c80", "font-weight": 700 }); t.textContent = "문";
+      el("rect", { x: X(d.x1), y: Y(d.y2), width: (d.x2 - d.x1) * S, height: (d.y2 - d.y1) * S, fill: "#fff", stroke: "#b8431c", "stroke-width": 1.5 });
+      const t = el("text", { x: X((d.x1 + d.x2) / 2), y: Y((d.y1 + d.y2) / 2) + 4, "text-anchor": "middle", "font-size": 11, fill: "#b8431c", "font-weight": 700 }); t.textContent = "문";
     }
-    for (const w of ed.wins) el("line", { x1: X(w.x1), y1: Y(w.y1), x2: X(w.x2), y2: Y(w.y2), stroke: "#2f70bb", "stroke-width": 7 });
+    for (const w of ed.wins) el("line", { x1: X(w.x1), y1: Y(w.y1), x2: X(w.x2), y2: Y(w.y2), stroke: "#2f6690", "stroke-width": 7 });
     if (ed.fire) {
       el("rect", { x: X(ed.fire.x), y: Y(ed.fire.y + .6), width: .6 * S, height: .6 * S, fill: "#e8572a", rx: 4 });
       const t = el("text", { x: X(ed.fire.x + .3), y: Y(ed.fire.y + .3) + 4, "text-anchor": "middle", "font-size": 11, fill: "#fff", "font-weight": 700 }); t.textContent = "화원";
     }
-    if (preview) el("rect", { x: X(preview.x1), y: Y(preview.y2), width: (preview.x2 - preview.x1) * S, height: (preview.y2 - preview.y1) * S, fill: "rgba(27,108,128,.14)", stroke: "#1b6c80", "stroke-dasharray": "6 4", "stroke-width": 2 });
+    if (preview) el("rect", { x: X(preview.x1), y: Y(preview.y2), width: (preview.x2 - preview.x1) * S, height: (preview.y2 - preview.y1) * S, fill: "rgba(232,85,42,.18)", stroke: "#e8572a", "stroke-dasharray": "6 4", "stroke-width": 2 });
     const note = el("text", { x: 8, y: CH * S - 8, "font-size": 12, fill: "#5f6672" });
     note.textContent = `격자 0.2 m · 캔버스 ${CW}×${CH} m · 도구: ${({ room: "방 그리기(드래그)", door: "문(두 방 사이 벽 클릭)", open: "개방(벽 클릭 → 트임, 다시 클릭 → 벽)", window: "창(바깥쪽 벽 클릭)", fire: "화원(방 안 클릭)", erase: "지우기(클릭)" })[ed.tool]}`;
     updateSide();
@@ -443,7 +443,7 @@ const CUSTOM = (() => {
         </div>
         <div>
           <div class="card" style="padding:10px">
-            <svg id="cu-svg" viewBox="0 0 ${CW * S} ${CH * S}" style="width:100%;height:auto;display:block;background:#f4f6f8;border-radius:6px;touch-action:none;cursor:crosshair"></svg>
+            <svg id="cu-svg" viewBox="0 0 ${CW * S} ${CH * S}" style="width:100%;height:auto;display:block;background:#f4f1ea;border-radius:10px;touch-action:none;cursor:crosshair"></svg>
           </div>
           <div class="card"><h2>불난 방 이론값 (정답 아님 · 보수적)</h2><div id="cu-theory"></div></div>
         </div>

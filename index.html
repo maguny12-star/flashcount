@@ -178,13 +178,13 @@
           <tr><td>C 처음 보는 평면 (유형 A 학습 → 유형 B 평가)</td><td class="num">92%</td><td class="num">98%</td></tr>
           <tr><td><b>D 처음 보는 평면</b> (유형 A·B 학습 모델 그대로 → 유형 C 48건, 재학습 없음)</td><td class="num"><b>94%</b></td><td class="num"><b>98%</b></td></tr>
         </table>
-        <p style="margin:6px 0 0;font-size:12.5px;color:var(--sub, var(--muted, #6b7280))">D에서 "60초 안에 피난 불가" 경고는 놓침 16%·헛경고 14%로 A와 같은 수준. 플래시오버 직전 1분 안 오차 30초 이내는 50~67%(A 66~74%)로 조금 낮고, 유형 C는 주방이 거실에 트여 있어 화재 후 1~2분 사이 주방 화재를 거실로 보는 경우가 있었습니다(그 구간 정답률 89%, 2분 이후 100%).</p>
+        <p style="margin:6px 0 0;font-size:12.5px;color:var(--sub, var(--muted, #6b7280))">D에서 "60초 안에 피난 불가" 경고는 놓침 16%·허위경고 14%로 A와 같은 수준. 플래시오버 직전 1분 안 오차 30초 이내는 50~67%(A 66~74%)로 조금 낮고, 유형 C는 주방이 거실에 트여 있어 화재 후 1~2분 사이 주방 화재를 거실로 보는 경우가 있었습니다(그 구간 정답률 89%, 2분 이후 100%).</p>
         <h3>실제로 쓰일 상황만 따로 보면 (평가 A, 비교 기준 = 센서 없이 경과 시간만 아는 방식)</h3>
         <table>
           <tr><th></th><th class="num">AI</th><th class="num">경과 시간만</th></tr>
           <tr><td>끝까지 안전한 방을 '안전'으로 판단</td><td class="num">97%</td><td class="num">5%</td></tr>
           <tr><td>"60초 안에 피난 불가" 경고 — 놓침</td><td class="num">17%</td><td class="num">21%</td></tr>
-          <tr><td>"60초 안에 피난 불가" 경고 — 헛경고</td><td class="num">15%</td><td class="num">80%</td></tr>
+          <tr><td>"60초 안에 피난 불가" 경고 — 허위경고</td><td class="num">15%</td><td class="num">80%</td></tr>
           <tr><td>플래시오버 직전 1분, 오차 30초 이내</td><td class="num">66~74%</td><td class="num">4~12%</td></tr>
           <tr><td>화원 방 정답률 (화재 후 30초 이후)</td><td class="num">100%</td><td class="num">—</td></tr>
         </table>

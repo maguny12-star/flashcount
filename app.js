@@ -645,7 +645,7 @@ function lvResult() {
     const actual = c.rooms[r].t_untenable;
     const w60 = firstT(pr => pr.ten[j] < 60), now = firstT(pr => pr.ten[j] < 5);
     let verdict;
-    if (actual == null) verdict = now == null ? "✓ 안전으로 맞게 판단" : "✗ 헛경고";
+    if (actual == null) verdict = now == null ? "✓ 안전으로 맞게 판단" : "✗ 허위경고";
     else if (w60 == null) verdict = "✗ 경고 놓침";
     else verdict = `경고 ${Math.round(actual - w60)}초 전`;
     return `<tr><td>${p.room_ko[r]}${r === c.fire_room ? " 🔥" : ""}</td><td class="num">${w60 == null ? "—" : fmt(w60)}</td><td class="num">${now == null ? "—" : fmt(now)}</td><td class="num"><b>${actual == null ? "안 옴" : fmt(actual)}</b></td><td>${verdict}</td></tr>`;
@@ -658,7 +658,7 @@ function lvResult() {
   $("lv-result").innerHTML = `<table><tr><th>방</th><th class="num">AI "60초 안" 경고</th><th class="num">AI "피난 불가"</th><th class="num">${c.split === "theory" ? "이론 피난 불가" : "FDS 실제 피난 불가"}</th><th>판정</th></tr>${rows}</table>
     <table style="margin-top:10px"><tr><th></th><th>AI</th><th>${truth}</th></tr>
     <tr><td>화원 방 (화재 30초 시점)</td><td>${topIdx >= 0 && p.slots[topIdx] ? p.room_ko[p.slots[topIdx]] + ` (${Math.round(at30.room[topIdx] * 100)}%)` : "—"}</td><td>${p.room_ko[c.fire_room]} ${topIdx >= 0 && p.slots[topIdx] === c.fire_room ? "✓" : "✗"}</td></tr>
-    <tr><td>플래시오버 "60초 안" 경고 (AI + 천장 500°C 보조)</td><td>${foW == null ? "경고 없음" : fmt(foW)}</td><td>${c.t_flashover == null ? "안 일어남" + (foW == null ? " ✓" : " (헛경고)") : fmt(c.t_flashover) + (foW == null ? " (놓침)" : ` (경고 ${Math.round(c.t_flashover - foW)}초 전)`)}</td></tr></table>`;
+    <tr><td>플래시오버 "60초 안" 경고 (AI + 천장 500°C 보조)</td><td>${foW == null ? "경고 없음" : fmt(foW)}</td><td>${c.t_flashover == null ? "안 일어남" + (foW == null ? " ✓" : " (허위경고)") : fmt(c.t_flashover) + (foW == null ? " (놓침)" : ` (경고 ${Math.round(c.t_flashover - foW)}초 전)`)}</td></tr></table>`;
 }
 
 function lvLoad(id) {
